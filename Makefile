@@ -17,7 +17,7 @@ libmem_test.so: mem_test.o
 	$(CC) $(SHARED) $(FPIC) -o libmem_test.so mem_test.o
 
 mem_test.o: mem.c mem.h
-	$(CC) $(CFLAGS) -DMEM_TESTING $(FPIC) -c mem.c -o mem_test.o
+	$(CC) $(CFLAGS) -DMEM_TESTING -DMEM_STATS $(FPIC) -c mem.c -o mem_test.o
 
 # 3. Testing Shared Library with MEM_ALLOW_INTERIOR=1
 libmem_interior.so: mem_interior.o
@@ -91,6 +91,20 @@ sanitize: test_suite_sanitize
 	@echo "\n>>> RUNNING SANITIZED TEST SUITE (UBSan on allocator & harness, ASan on harness) <<<"
 	./test_suite_sanitize
 
+# 11. Diagnostic Run for Phase 3a
+diagnose_fragmentation: diagnose_fragmentation.o libmem_test.so
+	$(CC) -o diagnose_fragmentation diagnose_fragmentation.o -L. -lmem_test -Wl,-rpath,.
+
+diagnose_fragmentation.o: diagnose_fragmentation.c mem.h
+	$(CC) $(CFLAGS) -DMEM_TESTING -DMEM_STATS -c diagnose_fragmentation.c -o diagnose_fragmentation.o
+
+diagnose: diagnose_fragmentation
+	./diagnose_fragmentation 50000
+
+# 12. Benchmark Workloads Matrix (Phase 3b)
+matrix:
+	python3 run_benchmark_matrix.py
+
 test: test_suite test_suite_interior
 	@echo "\n>>> RUNNING TEST SUITE (MEM_ALLOW_INTERIOR=0, Strict O(1) Path) <<<"
 	./test_suite
@@ -104,6 +118,6 @@ serve: all
 	python3 server.py
 
 clean:
-	rm -f *.o libmem.so libmem_test.so libmem_interior.so libmem_ubsan.so test_suite test_suite_interior test_suite_sanitize bench_compare real_runner stress_test stress_test_debug
+	rm -f *.o libmem.so libmem_test.so libmem_interior.so libmem_ubsan.so test_suite test_suite_interior test_suite_sanitize bench_compare real_runner stress_test stress_test_debug diagnose_fragmentation
 
-.PHONY: all clean test bench serve stress stress_debug sanitize
+.PHONY: all clean test bench serve stress stress_debug sanitize diagnose matrix

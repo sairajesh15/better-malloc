@@ -39,13 +39,34 @@ void  Mem_Dump(void);
 int   Mem_Check(void);
 
 /* Diagnostic Queries & Introspection */
-int   Mem_GetMmapCount(void);
-int   Mem_GetBinIndex(size_t size);
-void *Mem_GetArenaStart(void);
+int    Mem_GetMmapCount(void);
+int    Mem_GetBinIndex(size_t size);
+void  *Mem_GetArenaStart(void);
 size_t Mem_GetArenaSize(void);
+void   Mem_GetFragmentationMetrics(double *utilization, double *internal_frag, double *external_frag);
 
 #ifdef MEM_TESTING
 int   Mem_Reset(void);
+#endif
+
+#ifdef MEM_STATS
+typedef struct {
+    uint64_t last_alloc_nodes;
+    uint64_t last_insert_nodes;
+    uint64_t total_alloc_nodes;
+    uint64_t total_alloc_scans;
+    uint64_t total_insert_nodes;
+    uint64_t total_insert_ops;
+    uint64_t total_splits;
+    uint64_t total_coalesces;
+} mem_stats_summary_t;
+
+void     Mem_Stats_Reset(void);
+void     Mem_Stats_Get(mem_stats_summary_t *stats);
+uint64_t Mem_Stats_GetLastAllocNodes(void);
+uint64_t Mem_Stats_GetLastInsertNodes(void);
+uint64_t Mem_Stats_GetTotalSplits(void);
+uint64_t Mem_Stats_GetTotalCoalesces(void);
 #endif
 
 #ifdef __cplusplus

@@ -4,7 +4,10 @@ test_suite
 test_suite_interior
 test_suite_sanitize
 bench_compare
+bench_s*
+bench_sys
 real_runner
 stress_test
 stress_test_debug
+diagnose_fragmentation
 __pycache__/

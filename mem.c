@@ -26,9 +26,75 @@
 #define MEM_ALLOW_INTERIOR 0
 #endif
 
+/*
+ * Compile-time Policy Switches:
+ * 1. Search Policy (MEM_SEARCH_POLICY):
+ *    0 = SEARCH_FIRST_FIT (First-fit scan across all bins)
+ *    1 = SEARCH_BEST_FIT  (Best-fit in start bin, then higher bins)
+ *    2 = SEARCH_TAKE_HEAD (First-fit in start bin; in higher bins, take head O(1))
+ *
+ * 2. Insertion Policy (MEM_INSERT_POLICY):
+ *    0 = INSERT_ADDR_ORDER (Maintain ascending address order in bin)
+ *    1 = INSERT_LIFO       (Insert at head of bin in O(1) time)
+ *
+ * 3. Split Threshold (MEM_SPLIT_THRESHOLD):
+ *    0 = SPLIT_THRESH_16   (header + 16 bytes = 64 bytes)
+ *    1 = SPLIT_THRESH_64   (header + 64 bytes = 112 bytes)
+ */
+#ifndef MEM_SEARCH_POLICY
+#define MEM_SEARCH_POLICY 0
+#endif
+
+#ifndef MEM_INSERT_POLICY
+#define MEM_INSERT_POLICY 0 /* Default: Address-ordered insertion (guarantees lowest-address first-fit reuse) */
+#endif
+
+#ifndef MEM_SPLIT_THRESHOLD
+#define MEM_SPLIT_THRESHOLD 0
+#endif
+
 /* Global error status and syscall counter */
 int m_error = 0;
 int m_mmap_syscall_count = 0;
+
+#ifdef MEM_STATS
+static uint64_t g_stat_last_alloc_nodes = 0;
+static uint64_t g_stat_last_insert_nodes = 0;
+static uint64_t g_stat_total_alloc_nodes = 0;
+static uint64_t g_stat_total_alloc_scans = 0;
+static uint64_t g_stat_total_insert_nodes = 0;
+static uint64_t g_stat_total_insert_ops = 0;
+static uint64_t g_stat_total_splits = 0;
+static uint64_t g_stat_total_coalesces = 0;
+
+void Mem_Stats_Reset(void) {
+    g_stat_last_alloc_nodes = 0;
+    g_stat_last_insert_nodes = 0;
+    g_stat_total_alloc_nodes = 0;
+    g_stat_total_alloc_scans = 0;
+    g_stat_total_insert_nodes = 0;
+    g_stat_total_insert_ops = 0;
+    g_stat_total_splits = 0;
+    g_stat_total_coalesces = 0;
+}
+
+void Mem_Stats_Get(mem_stats_summary_t *stats) {
+    if (!stats) return;
+    stats->last_alloc_nodes = g_stat_last_alloc_nodes;
+    stats->last_insert_nodes = g_stat_last_insert_nodes;
+    stats->total_alloc_nodes = g_stat_total_alloc_nodes;
+    stats->total_alloc_scans = g_stat_total_alloc_scans;
+    stats->total_insert_nodes = g_stat_total_insert_nodes;
+    stats->total_insert_ops = g_stat_total_insert_ops;
+    stats->total_splits = g_stat_total_splits;
+    stats->total_coalesces = g_stat_total_coalesces;
+}
+
+uint64_t Mem_Stats_GetLastAllocNodes(void) { return g_stat_last_alloc_nodes; }
+uint64_t Mem_Stats_GetLastInsertNodes(void) { return g_stat_last_insert_nodes; }
+uint64_t Mem_Stats_GetTotalSplits(void) { return g_stat_total_splits; }
+uint64_t Mem_Stats_GetTotalCoalesces(void) { return g_stat_total_coalesces; }
+#endif
 
 /*
  * Block header structure tracking payload size, allocation status,
@@ -93,13 +159,37 @@ int Mem_GetMmapCount(void) {
  * Helper: Insert a block into its appropriate segregated bin (address-ordered).
  */
 static void insert_into_bin(block_header_t *block) {
+#ifdef MEM_STATS
+    g_stat_total_insert_ops++;
+#endif
     block->is_free = 1;
     int bin = Mem_GetBinIndex(block->size);
 
+#if (MEM_INSERT_POLICY == 1)
+    /* LIFO Insertion Policy: O(1) push to head of segregated bin */
+    block->next_free = free_bins[bin];
+    block->prev_free = NULL;
+    if (free_bins[bin] != NULL) {
+        free_bins[bin]->prev_free = block;
+    }
+    free_bins[bin] = block;
+#ifdef MEM_STATS
+    g_stat_last_insert_nodes = 0;
+#endif
+    return;
+
+#else
+    /* Address-Ordered Insertion Policy */
+#ifdef MEM_STATS
+    uint64_t ins_nodes = 0;
+#endif
     if (free_bins[bin] == NULL) {
         free_bins[bin] = block;
         block->prev_free = NULL;
         block->next_free = NULL;
+#ifdef MEM_STATS
+        g_stat_last_insert_nodes = 0;
+#endif
         return;
     }
 
@@ -109,11 +199,21 @@ static void insert_into_bin(block_header_t *block) {
         block->prev_free = NULL;
         free_bins[bin]->prev_free = block;
         free_bins[bin] = block;
+#ifdef MEM_STATS
+        g_stat_last_insert_nodes = 1;
+        g_stat_total_insert_nodes += 1;
+#endif
         return;
     }
 
     block_header_t *curr = free_bins[bin];
+#ifdef MEM_STATS
+    ins_nodes = 1;
+#endif
     while (curr->next_free != NULL && curr->next_free < block) {
+#ifdef MEM_STATS
+        ins_nodes++;
+#endif
         curr = curr->next_free;
     }
 
@@ -123,6 +223,11 @@ static void insert_into_bin(block_header_t *block) {
         curr->next_free->prev_free = block;
     }
     curr->next_free = block;
+#ifdef MEM_STATS
+    g_stat_last_insert_nodes = ins_nodes;
+    g_stat_total_insert_nodes += ins_nodes;
+#endif
+#endif
 }
 
 /*
@@ -347,21 +452,137 @@ void *Mem_Alloc(int size) {
     /* Search starting from the appropriate segregated bin and progress upwards */
     int start_bin = Mem_GetBinIndex(req_size);
     block_header_t *curr = NULL;
+#ifdef MEM_STATS
+    uint64_t scan_nodes = 0;
+    g_stat_total_alloc_scans++;
+#endif
 
-    for (int b = start_bin; b < NUM_BINS; b++) {
+#if (MEM_SEARCH_POLICY == 1)
+    /* Best-Fit Search Policy: Find smallest block >= req_size in start bin, then higher bins */
+    block_header_t *best_block = NULL;
+    size_t best_size = SIZE_MAX;
+
+    curr = free_bins[start_bin];
+    while (curr != NULL) {
+#ifdef MEM_STATS
+        scan_nodes++;
+#endif
+        if (curr->magic != BLOCK_MAGIC) {
+            m_error = E_CORRUPT_FREESPACE;
+            return NULL;
+        }
+        if (curr->is_free && curr->size >= req_size) {
+            if (curr->size < best_size) {
+                best_size = curr->size;
+                best_block = curr;
+                if (best_size == req_size) break; /* Exact fit */
+            }
+        }
+        curr = curr->next_free;
+    }
+
+    if (best_block != NULL) {
+        curr = best_block;
+#ifdef MEM_STATS
+        g_stat_last_alloc_nodes = scan_nodes;
+        g_stat_total_alloc_nodes += scan_nodes;
+#endif
+        goto block_found;
+    }
+
+    for (int b = start_bin + 1; b < NUM_BINS; b++) {
         curr = free_bins[b];
         while (curr != NULL) {
+#ifdef MEM_STATS
+            scan_nodes++;
+#endif
             if (curr->magic != BLOCK_MAGIC) {
                 m_error = E_CORRUPT_FREESPACE;
                 return NULL;
             }
             if (curr->is_free && curr->size >= req_size) {
+                if (curr->size < best_size) {
+                    best_size = curr->size;
+                    best_block = curr;
+                }
+            }
+            curr = curr->next_free;
+        }
+        if (best_block != NULL) {
+            curr = best_block;
+#ifdef MEM_STATS
+            g_stat_last_alloc_nodes = scan_nodes;
+            g_stat_total_alloc_nodes += scan_nodes;
+#endif
+            goto block_found;
+        }
+    }
+
+#elif (MEM_SEARCH_POLICY == 2)
+    /* Take-Head in Higher Bins Policy: First-fit in start bin; in higher bins, take head in O(1) */
+    curr = free_bins[start_bin];
+    while (curr != NULL) {
+#ifdef MEM_STATS
+        scan_nodes++;
+#endif
+        if (curr->magic != BLOCK_MAGIC) {
+            m_error = E_CORRUPT_FREESPACE;
+            return NULL;
+        }
+        if (curr->is_free && curr->size >= req_size) {
+#ifdef MEM_STATS
+            g_stat_last_alloc_nodes = scan_nodes;
+            g_stat_total_alloc_nodes += scan_nodes;
+#endif
+            goto block_found;
+        }
+        curr = curr->next_free;
+    }
+
+    for (int b = start_bin + 1; b < NUM_BINS; b++) {
+        if (free_bins[b] != NULL) {
+            curr = free_bins[b];
+#ifdef MEM_STATS
+            scan_nodes++;
+            g_stat_last_alloc_nodes = scan_nodes;
+            g_stat_total_alloc_nodes += scan_nodes;
+#endif
+            if (curr->magic != BLOCK_MAGIC) {
+                m_error = E_CORRUPT_FREESPACE;
+                return NULL;
+            }
+            goto block_found;
+        }
+    }
+
+#else
+    /* Default: First-Fit across all bins */
+    for (int b = start_bin; b < NUM_BINS; b++) {
+        curr = free_bins[b];
+        while (curr != NULL) {
+#ifdef MEM_STATS
+            scan_nodes++;
+#endif
+            if (curr->magic != BLOCK_MAGIC) {
+                m_error = E_CORRUPT_FREESPACE;
+                return NULL;
+            }
+            if (curr->is_free && curr->size >= req_size) {
+#ifdef MEM_STATS
+                g_stat_last_alloc_nodes = scan_nodes;
+                g_stat_total_alloc_nodes += scan_nodes;
+#endif
                 goto block_found;
             }
             curr = curr->next_free;
         }
     }
+#endif
 
+#ifdef MEM_STATS
+    g_stat_last_alloc_nodes = scan_nodes;
+    g_stat_total_alloc_nodes += scan_nodes;
+#endif
     /* Out of space across all bins */
     m_error = E_NO_SPACE;
     return NULL;
@@ -369,8 +590,19 @@ void *Mem_Alloc(int size) {
 block_found:
     remove_from_bin(curr);
 
+#if (MEM_SPLIT_THRESHOLD == 1)
+    /* SPLIT_THRESH_64: require remainder >= header + 64 bytes (112 B) */
+    size_t split_threshold = sizeof(block_header_t) + 64;
+#else
+    /* SPLIT_THRESH_16: require remainder >= header + 16 bytes (64 B) */
+    size_t split_threshold = sizeof(block_header_t) + MEM_ALIGN;
+#endif
+
     size_t remaining = curr->size - req_size;
-    if (remaining >= sizeof(block_header_t) + MEM_ALIGN) {
+    if (remaining >= split_threshold) {
+#ifdef MEM_STATS
+        g_stat_total_splits++;
+#endif
         char *split_addr = (char *)curr + sizeof(block_header_t) + req_size;
         block_header_t *split_block = (block_header_t *)split_addr;
 
@@ -481,6 +713,9 @@ int Mem_Free(void *ptr) {
         }
 
         if (block->next_phys->is_free) {
+#ifdef MEM_STATS
+            g_stat_total_coalesces++;
+#endif
             block_header_t *next = block->next_phys;
             remove_from_bin(next);
             block->size += sizeof(block_header_t) + next->size;
@@ -506,6 +741,9 @@ int Mem_Free(void *ptr) {
         }
 
         if (block->prev_phys->is_free) {
+#ifdef MEM_STATS
+            g_stat_total_coalesces++;
+#endif
             block_header_t *prev = block->prev_phys;
             remove_from_bin(prev);
             prev->size += sizeof(block_header_t) + block->size;
@@ -610,6 +848,53 @@ void *Mem_GetArenaStart(void) {
 
 size_t Mem_GetArenaSize(void) {
     return arena_size;
+}
+
+void Mem_GetFragmentationMetrics(double *utilization, double *internal_frag, double *external_frag) {
+    if (!is_initialized || arena_start == NULL || arena_size == 0) {
+        if (utilization) *utilization = 0.0;
+        if (internal_frag) *internal_frag = 0.0;
+        if (external_frag) *external_frag = 0.0;
+        return;
+    }
+
+    size_t active_req_bytes = 0;
+    size_t active_block_bytes = 0;
+    size_t total_free_bytes = 0;
+    size_t largest_free_block = 0;
+
+    size_t max_steps = arena_size / sizeof(block_header_t) + 1;
+    size_t steps = 0;
+    block_header_t *curr = (block_header_t *)arena_start;
+
+    while (curr != NULL && (char *)curr < (char *)arena_end && steps++ < max_steps) {
+        if (curr->magic != BLOCK_MAGIC) break;
+
+        if (curr->is_free) {
+            total_free_bytes += curr->size;
+            if (curr->size > largest_free_block) {
+                largest_free_block = curr->size;
+            }
+        } else {
+            active_req_bytes += curr->req_size;
+            active_block_bytes += curr->size;
+        }
+        curr = curr->next_phys;
+    }
+
+    if (utilization) {
+        *utilization = (double)active_req_bytes / (double)arena_size;
+    }
+    if (internal_frag) {
+        *internal_frag = (active_block_bytes > 0)
+            ? (double)(active_block_bytes - active_req_bytes) / (double)active_block_bytes
+            : 0.0;
+    }
+    if (external_frag) {
+        *external_frag = (total_free_bytes > 0)
+            ? (1.0 - ((double)largest_free_block / (double)total_free_bytes))
+            : 0.0;
+    }
 }
 
 /*
@@ -770,11 +1055,13 @@ int Mem_Check(void) {
                     m_error = E_CORRUPT_FREESPACE;
                     return -1;
                 }
-                /* Address ordering check */
+#if (MEM_INSERT_POLICY == 0)
+                /* Address ordering check (only applicable in address-ordered bins) */
                 if (f <= prev_f) {
                     m_error = E_CORRUPT_FREESPACE;
                     return -1;
                 }
+#endif
             }
 
             bin_free_blocks++;
@@ -817,6 +1104,9 @@ int Mem_Reset(void) {
     for (int i = 0; i < NUM_BINS; i++) {
         free_bins[i] = NULL;
     }
+#ifdef MEM_STATS
+    Mem_Stats_Reset();
+#endif
     return 0;
 }
 #endif

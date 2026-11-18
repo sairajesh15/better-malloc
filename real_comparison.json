@@ -1,5 +1,5 @@
 {
-  "timestamp": 1795007042,
+  "timestamp": 1795007425,
   "architecture": "Apple Silicon ARM64 (macOS)",
   "compiler": "Apple Clang -O2",
   "mmap_syscall_count": 1,
@@ -12,29 +12,29 @@
       "key": "http_json",
       "name": "HTTP / JSON Parser Trace",
       "operations": 50000,
-      "libmem": { "throughput_mops": 4.92, "p50_ns": 166, "p99_ns": 417, "max_ns": 34125, "time_sec": 0.0102 },
-      "system_malloc": { "throughput_mops": 9.85, "p50_ns": 83, "p99_ns": 167, "max_ns": 16875, "time_sec": 0.0051 }
+      "libmem": { "throughput_mops": 3.14, "p50_ns": 42, "p99_ns": 333, "max_ns": 1794625, "time_sec": 0.0159 },
+      "system_malloc": { "throughput_mops": 5.60, "p50_ns": 42, "p99_ns": 167, "max_ns": 1483250, "time_sec": 0.0089 }
     },
     {
       "key": "frame_queue",
       "name": "Frame Buffer FIFO Queue Trace",
       "operations": 50000,
-      "libmem": { "throughput_mops": 2.13, "p50_ns": 125, "p99_ns": 2875, "max_ns": 1310250, "time_sec": 0.0234 },
-      "system_malloc": { "throughput_mops": 2.04, "p50_ns": 42, "p99_ns": 2417, "max_ns": 4262042, "time_sec": 0.0245 }
+      "libmem": { "throughput_mops": 1.45, "p50_ns": 83, "p99_ns": 3375, "max_ns": 737417, "time_sec": 0.0346 },
+      "system_malloc": { "throughput_mops": 1.89, "p50_ns": 42, "p99_ns": 1750, "max_ns": 4940542, "time_sec": 0.0264 }
     },
     {
       "key": "fragmentation",
       "name": "Fragmentation Stress & Coalescing",
       "operations": 50000,
-      "libmem": { "throughput_mops": 0.22, "p50_ns": 41, "p99_ns": 45709, "max_ns": 317792, "time_sec": 0.2252 },
-      "system_malloc": { "throughput_mops": 31.15, "p50_ns": 0, "p99_ns": 125, "max_ns": 16208, "time_sec": 0.0016 }
+      "libmem": { "throughput_mops": 0.17, "p50_ns": 41, "p99_ns": 49666, "max_ns": 9361334, "time_sec": 0.2976 },
+      "system_malloc": { "throughput_mops": 16.17, "p50_ns": 0, "p99_ns": 417, "max_ns": 45208, "time_sec": 0.0031 }
     },
     {
       "key": "random_mixed",
       "name": "Random Mixed High-Churn Trace",
       "operations": 50000,
-      "libmem": { "throughput_mops": 7.74, "p50_ns": 83, "p99_ns": 375, "max_ns": 20583, "time_sec": 0.0065 },
-      "system_malloc": { "throughput_mops": 18.77, "p50_ns": 42, "p99_ns": 167, "max_ns": 27250, "time_sec": 0.0027 }
+      "libmem": { "throughput_mops": 7.67, "p50_ns": 83, "p99_ns": 375, "max_ns": 21750, "time_sec": 0.0065 },
+      "system_malloc": { "throughput_mops": 16.84, "p50_ns": 42, "p99_ns": 208, "max_ns": 45750, "time_sec": 0.0030 }
     }
   ]
 }

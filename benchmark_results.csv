@@ -1,0 +1,43 @@
+config_id,config_name,workload,median_ns_op,iqr_ns_op,utilization,internal_frag,external_frag
+S0_I0_T0,"First-Fit / Addr-Order / Split-16 (Baseline)",small_allocs,21.75,0.33,0.0000,0.0000,0.0000
+S0_I0_T0,"First-Fit / Addr-Order / Split-16 (Baseline)",mixed,52.25,2.60,0.0000,0.0000,0.0000
+S0_I0_T0,"First-Fit / Addr-Order / Split-16 (Baseline)",large_allocs,350.38,36.13,0.0000,0.0000,0.0000
+S0_I0_T0,"First-Fit / Addr-Order / Split-16 (Baseline)",lifo_free,38.40,0.56,0.0048,0.0886,0.0000
+S0_I0_T0,"First-Fit / Addr-Order / Split-16 (Baseline)",fifo_free,38.60,1.44,0.0048,0.0886,0.0000
+S0_I0_T0,"First-Fit / Addr-Order / Split-16 (Baseline)",random_free,108.33,7.25,0.0048,0.0886,0.0000
+S0_I0_T0,"First-Fit / Addr-Order / Split-16 (Baseline)",frag_stress,353.06,14.26,0.0047,0.0865,0.0053
+S0_I1_T0,"First-Fit / LIFO / Split-16",small_allocs,21.62,0.37,0.0000,0.0000,0.0000
+S0_I1_T0,"First-Fit / LIFO / Split-16",mixed,49.60,1.08,0.0000,0.0000,0.0000
+S0_I1_T0,"First-Fit / LIFO / Split-16",large_allocs,343.00,52.00,0.0000,0.0000,0.0000
+S0_I1_T0,"First-Fit / LIFO / Split-16",lifo_free,38.71,1.40,0.0048,0.0886,0.0000
+S0_I1_T0,"First-Fit / LIFO / Split-16",fifo_free,38.52,1.40,0.0048,0.0886,0.0000
+S0_I1_T0,"First-Fit / LIFO / Split-16",random_free,49.73,1.23,0.0048,0.0886,0.0000
+S0_I1_T0,"First-Fit / LIFO / Split-16",frag_stress,37.05,0.40,0.0047,0.0865,0.0053
+S1_I1_T0,"Best-Fit / LIFO / Split-16",small_allocs,23.73,0.56,0.0000,0.0000,0.0000
+S1_I1_T0,"Best-Fit / LIFO / Split-16",mixed,49.58,0.87,0.0000,0.0000,0.0000
+S1_I1_T0,"Best-Fit / LIFO / Split-16",large_allocs,345.17,31.58,0.0000,0.0000,0.0000
+S1_I1_T0,"Best-Fit / LIFO / Split-16",lifo_free,41.52,1.54,0.0048,0.0886,0.0000
+S1_I1_T0,"Best-Fit / LIFO / Split-16",fifo_free,41.54,0.77,0.0048,0.0886,0.0000
+S1_I1_T0,"Best-Fit / LIFO / Split-16",random_free,52.71,0.81,0.0048,0.0886,0.0000
+S1_I1_T0,"Best-Fit / LIFO / Split-16",frag_stress,38.74,1.25,0.0047,0.0865,0.0053
+S2_I1_T0,"Take-Head / LIFO / Split-16",small_allocs,20.98,0.52,0.0000,0.0000,0.0000
+S2_I1_T0,"Take-Head / LIFO / Split-16",mixed,50.62,0.94,0.0000,0.0000,0.0000
+S2_I1_T0,"Take-Head / LIFO / Split-16",large_allocs,344.46,46.42,0.0000,0.0000,0.0000
+S2_I1_T0,"Take-Head / LIFO / Split-16",lifo_free,38.96,0.60,0.0048,0.0886,0.0000
+S2_I1_T0,"Take-Head / LIFO / Split-16",fifo_free,38.44,1.17,0.0048,0.0886,0.0000
+S2_I1_T0,"Take-Head / LIFO / Split-16",random_free,48.27,0.73,0.0048,0.0886,0.0000
+S2_I1_T0,"Take-Head / LIFO / Split-16",frag_stress,36.30,0.86,0.0047,0.0865,0.0053
+S2_I1_T1,"Take-Head / LIFO / Split-64",small_allocs,23.79,1.15,0.0000,0.0000,0.0000
+S2_I1_T1,"Take-Head / LIFO / Split-64",mixed,55.19,2.15,0.0000,0.0000,0.0000
+S2_I1_T1,"Take-Head / LIFO / Split-64",large_allocs,361.38,35.38,0.0000,0.0000,0.0000
+S2_I1_T1,"Take-Head / LIFO / Split-64",lifo_free,41.08,1.38,0.0048,0.0886,0.0000
+S2_I1_T1,"Take-Head / LIFO / Split-64",fifo_free,40.50,1.90,0.0048,0.0886,0.0000
+S2_I1_T1,"Take-Head / LIFO / Split-64",random_free,50.17,1.10,0.0048,0.0886,0.0000
+S2_I1_T1,"Take-Head / LIFO / Split-64",frag_stress,37.98,1.08,0.0047,0.0865,0.0053
+system_malloc,"macOS libsystem_malloc (Thread-safe, Unbounded)",small_allocs,17.60,0.38,0.0000,0.0000,0.0000
+system_malloc,"macOS libsystem_malloc (Thread-safe, Unbounded)",mixed,20.50,0.40,0.0000,0.0000,0.0000
+system_malloc,"macOS libsystem_malloc (Thread-safe, Unbounded)",large_allocs,25.83,0.25,0.0000,0.0000,0.0000
+system_malloc,"macOS libsystem_malloc (Thread-safe, Unbounded)",lifo_free,32.08,2.48,0.0000,0.0000,0.0000
+system_malloc,"macOS libsystem_malloc (Thread-safe, Unbounded)",fifo_free,31.25,0.35,0.0000,0.0000,0.0000
+system_malloc,"macOS libsystem_malloc (Thread-safe, Unbounded)",random_free,37.33,1.56,0.0000,0.0000,0.0000
+system_malloc,"macOS libsystem_malloc (Thread-safe, Unbounded)",frag_stress,27.71,3.01,0.0000,0.0000,0.0000
