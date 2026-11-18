@@ -1,16 +1,40 @@
 {
-  "timestamp": 1795006407,
+  "timestamp": 1795006435,
   "architecture": "Apple Silicon ARM64 (macOS)",
   "compiler": "Apple Clang -O2",
   "mmap_syscall_count": 1,
   "safety": {
     "canary_buffer_overflow_detected": true,
-    "interior_pointer_free_supported": true
+    "interior_pointer_free_supported": false
   },
-  "workload": {
-    "name": "Interactive Custom Live Benchmark",
-    "operations": 20000,
-    "libmem": { "throughput_mops": 7.04, "p50_ns": 83, "p90_ns": 167, "p99_ns": 333, "max_ns": 3500, "time_sec": 0.002839, "minor_faults": 70, "vol_csw": 0, "invol_csw": 0 },
-    "system_malloc": { "throughput_mops": 13.23, "p50_ns": 42, "p90_ns": 84, "p99_ns": 167, "max_ns": 3792, "time_sec": 0.001512, "minor_faults": 72, "vol_csw": 0, "invol_csw": 0 }
-  }
+  "workloads": [
+    {
+      "key": "http_json",
+      "name": "HTTP / JSON Parser Trace",
+      "operations": 50000,
+      "libmem": { "throughput_mops": 13.64, "p50_ns": 42, "p99_ns": 125, "max_ns": 6375, "time_sec": 0.0037 },
+      "system_malloc": { "throughput_mops": 21.46, "p50_ns": 42, "p99_ns": 84, "max_ns": 20208, "time_sec": 0.0023 }
+    },
+    {
+      "key": "frame_queue",
+      "name": "Frame Buffer FIFO Queue Trace",
+      "operations": 50000,
+      "libmem": { "throughput_mops": 4.01, "p50_ns": 83, "p99_ns": 1209, "max_ns": 2391875, "time_sec": 0.0125 },
+      "system_malloc": { "throughput_mops": 1.72, "p50_ns": 42, "p99_ns": 2083, "max_ns": 6103375, "time_sec": 0.0291 }
+    },
+    {
+      "key": "fragmentation",
+      "name": "Fragmentation Stress & Coalescing",
+      "operations": 50000,
+      "libmem": { "throughput_mops": 0.20, "p50_ns": 42, "p99_ns": 49416, "max_ns": 4347250, "time_sec": 0.2515 },
+      "system_malloc": { "throughput_mops": 13.17, "p50_ns": 41, "p99_ns": 292, "max_ns": 234708, "time_sec": 0.0038 }
+    },
+    {
+      "key": "random_mixed",
+      "name": "Random Mixed High-Churn Trace",
+      "operations": 50000,
+      "libmem": { "throughput_mops": 4.43, "p50_ns": 125, "p99_ns": 833, "max_ns": 600917, "time_sec": 0.0113 },
+      "system_malloc": { "throughput_mops": 9.28, "p50_ns": 42, "p99_ns": 417, "max_ns": 222250, "time_sec": 0.0054 }
+    }
+  ]
 }
