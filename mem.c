@@ -10,7 +10,21 @@
 #endif
 
 #define BLOCK_MAGIC 0x4D454D59U /* 'MEMY' */
-#define ALIGN8(s) (((size_t)(s) + 7) & ~((size_t)7))
+
+#ifndef MEM_ALIGN
+#define MEM_ALIGN 16
+#endif
+
+#define ALIGN(s) (((size_t)(s) + ((size_t)MEM_ALIGN - 1)) & ~((size_t)MEM_ALIGN - 1))
+
+/*
+ * Compile-time flag: MEM_ALLOW_INTERIOR (default 0)
+ * When 0, Mem_Free accepts only exact payload-start pointers (O(1) path).
+ * When 1, Mem_Free resolves interior pointers (payload_start <= ptr < payload_end).
+ */
+#ifndef MEM_ALLOW_INTERIOR
+#define MEM_ALLOW_INTERIOR 0
+#endif
 
 /* Global error status and syscall counter */
 int m_error = 0;
@@ -19,19 +33,36 @@ int m_mmap_syscall_count = 0;
 /*
  * Block header structure tracking payload size, allocation status,
  * contiguous physical neighbors, and doubly-linked free list pointers.
- * Sized to 48 bytes on 64-bit architectures, maintaining strict 8-byte alignment.
+ * Sized to 48 bytes on 64-bit architectures, maintaining strict 16-byte alignment.
+ *
+ * Canary Placement Architecture:
+ * While a block is free, prev_free and next_free link it into its segregated bin.
+ * While allocated, an anonymous union overlays req_size (the exact user-requested
+ * byte count) over prev_free/next_free. This allows Mem_Alloc to place the 8-byte
+ * canary immediately after the requested bytes (payload + req_size), and fill
+ * any remaining slack bytes up to block->size with CANARY_PAD_BYTE (0xA5).
+ * In Mem_Free, both the canary and all padding bytes are validated.
  */
 typedef struct block_header {
-    size_t size;                     /* Usable payload size in bytes (multiple of 8) */
+    size_t size;                     /* Usable block capacity in bytes (multiple of MEM_ALIGN) */
     int is_free;                     /* 1 = free, 0 = allocated */
     uint32_t magic;                  /* Validation magic constant */
     struct block_header *prev_phys;  /* Contiguous physical block before this block */
     struct block_header *next_phys;  /* Contiguous physical block after this block */
-    struct block_header *prev_free;  /* Doubly-linked free list: previous free block */
-    struct block_header *next_free;  /* Doubly-linked free list: next free block */
+    union {
+        struct {
+            struct block_header *prev_free;  /* Doubly-linked free list: previous free block */
+            struct block_header *next_free;  /* Doubly-linked free list: next free block */
+        };
+        struct {
+            size_t req_size;                 /* Exact user-requested allocation size */
+            uint64_t _pad_alloc;             /* 8-byte padding to maintain 16-byte union */
+        };
+    };
 } block_header_t;
 
-_Static_assert(sizeof(block_header_t) % 8 == 0, "block_header_t must be 8-byte aligned");
+_Static_assert(sizeof(block_header_t) == 48, "block_header_t must be exactly 48 bytes");
+_Static_assert(sizeof(block_header_t) % MEM_ALIGN == 0, "block_header_t must be MEM_ALIGN-aligned");
 
 /* Arena management state */
 static void *arena_start = NULL;
@@ -115,8 +146,19 @@ static void remove_from_bin(block_header_t *block) {
 }
 
 /*
- * Helper: Resolve a pointer (exact payload start or interior pointer)
- * to its enclosing block header. Returns NULL if invalid or out of bounds.
+ * Architectural Note on the Stale-Pointer Hazard:
+ * Allowing interior pointer deallocation (MEM_ALLOW_INTERIOR=1) introduces a
+ * hazardous programming pattern: when callers pass an interior pointer (e.g.
+ * &record->field or buffer + offset), freeing the enclosing parent block silently
+ * invalidates all other interior pointers into the same allocation that may still
+ * be held by the application. Subsequent calls to free other fields lead to
+ * double-free errors, use-after-free vulnerabilities, or undefined memory access.
+ * Furthermore, locating the enclosing header requires an O(N) linear walk of
+ * physical blocks, destroying the deterministic O(1) deallocation guarantee.
+ *
+ * By default, MEM_ALLOW_INTERIOR is set to 0. Only exact payload-start pointers
+ * are accepted via the O(1) constant-time path; any interior offset immediately
+ * fails and sets m_error = E_BAD_POINTER.
  */
 static block_header_t *find_block_for_ptr(void *ptr) {
     if (!is_initialized || arena_start == NULL || ptr == NULL) {
@@ -128,8 +170,8 @@ static block_header_t *find_block_for_ptr(void *ptr) {
         return NULL;
     }
 
-    /* Fast path: Check if ptr is an exact payload start pointer */
-    if (((uintptr_t)p % 8 == 0) && (p >= (char *)arena_start + sizeof(block_header_t))) {
+    /* O(1) Fast path: Check if ptr is an exact payload start pointer */
+    if (((uintptr_t)p % MEM_ALIGN == 0) && (p >= (char *)arena_start + sizeof(block_header_t))) {
         block_header_t *cand = (block_header_t *)(p - sizeof(block_header_t));
         if ((char *)cand >= (char *)arena_start && (char *)cand < (char *)arena_end) {
             if (cand->magic == BLOCK_MAGIC) {
@@ -139,7 +181,8 @@ static block_header_t *find_block_for_ptr(void *ptr) {
                         valid = 1;
                     }
                 } else {
-                    if (cand->prev_phys != NULL && cand->prev_phys->next_phys == cand) {
+                    if (cand->prev_phys != NULL && cand->prev_phys->next_phys == cand &&
+                        cand->prev_phys->magic == BLOCK_MAGIC) {
                         valid = 1;
                     }
                 }
@@ -149,7 +192,8 @@ static block_header_t *find_block_for_ptr(void *ptr) {
                             return cand;
                         }
                     } else {
-                        if (cand->next_phys->prev_phys == cand &&
+                        if (cand->next_phys->magic == BLOCK_MAGIC &&
+                            cand->next_phys->prev_phys == cand &&
                             (char *)cand + sizeof(block_header_t) + cand->size == (char *)cand->next_phys) {
                             return cand;
                         }
@@ -159,9 +203,16 @@ static block_header_t *find_block_for_ptr(void *ptr) {
         }
     }
 
-    /* General / Interior pointer lookup: Walk contiguous physical blocks */
+#if MEM_ALLOW_INTERIOR
+    /*
+     * Interior pointer fallback path: Walk contiguous physical blocks.
+     * Hardened with step limit (arena_size / sizeof(block_header_t) + 1) to prevent infinite loops.
+     */
+    size_t max_steps = arena_size / sizeof(block_header_t) + 1;
+    size_t steps = 0;
     block_header_t *curr = (block_header_t *)arena_start;
-    while (curr != NULL && (char *)curr < (char *)arena_end) {
+
+    while (curr != NULL && (char *)curr < (char *)arena_end && steps++ < max_steps) {
         if (curr->magic != BLOCK_MAGIC) {
             return NULL; /* Metadata corrupted */
         }
@@ -180,6 +231,7 @@ static block_header_t *find_block_for_ptr(void *ptr) {
 
         curr = curr->next_phys;
     }
+#endif
 
     return NULL;
 }
@@ -249,7 +301,14 @@ int Mem_Init(int sizeOfRegion) {
 /*
  * Mem_Alloc: Allocate a memory block of at least size bytes.
  * Uses Segregated Free-List Bins with First-Fit and block splitting.
- * Enforces strict 8-byte alignment and arms an 8-byte trailing canary.
+ *
+ * Safety & Overflow Guarantees:
+ * - Computes required size using unsigned size_t: ALIGN(size + 8).
+ * - Rejects size <= 0 or arithmetic overflow with E_BAD_ARGS.
+ * - Rejects sizes exceeding usable arena capacity with E_NO_SPACE.
+ * - Places 8-byte trailing canary (0xDEADBEEFCAFEBABE) immediately following
+ *   the requested bytes (payload + size) via memcpy.
+ * - Fills all remaining slack bytes up to block->size with CANARY_PAD_BYTE (0xA5).
  */
 void *Mem_Alloc(int size) {
     if (!is_initialized) {
@@ -262,7 +321,28 @@ void *Mem_Alloc(int size) {
         return NULL;
     }
 
-    size_t req_size = ALIGN8(size + 8);
+    size_t u_size = (size_t)size;
+
+    /* Check for overflow in addition: u_size + 8 */
+    if (u_size > SIZE_MAX - sizeof(uint64_t)) {
+        m_error = E_BAD_ARGS;
+        return NULL;
+    }
+
+    size_t raw_needed = u_size + sizeof(uint64_t);
+    size_t req_size = ALIGN(raw_needed);
+
+    /* Check for overflow in alignment rounding */
+    if (req_size < raw_needed) {
+        m_error = E_BAD_ARGS;
+        return NULL;
+    }
+
+    /* Check if request exceeds total usable arena capacity */
+    if (req_size > arena_size - sizeof(block_header_t)) {
+        m_error = E_NO_SPACE;
+        return NULL;
+    }
 
     /* Search starting from the appropriate segregated bin and progress upwards */
     int start_bin = Mem_GetBinIndex(req_size);
@@ -290,7 +370,7 @@ block_found:
     remove_from_bin(curr);
 
     size_t remaining = curr->size - req_size;
-    if (remaining >= sizeof(block_header_t) + 16) {
+    if (remaining >= sizeof(block_header_t) + MEM_ALIGN) {
         char *split_addr = (char *)curr + sizeof(block_header_t) + req_size;
         block_header_t *split_block = (block_header_t *)split_addr;
 
@@ -307,26 +387,37 @@ block_found:
         curr->size = req_size;
 
         insert_into_bin(split_block);
-
-        curr->prev_free = NULL;
-        curr->next_free = NULL;
-        curr->is_free = 0;
-    } else {
-        curr->is_free = 0;
     }
 
-    /* Arm 8-Byte Trailing Canary at the very end of the allocated payload */
-    uint64_t *canary_ptr = (uint64_t *)((char *)curr + sizeof(block_header_t) + curr->size - 8);
-    *canary_ptr = CANARY_MAGIC;
+    curr->is_free = 0;
+    curr->req_size = u_size;
+    curr->_pad_alloc = 0;
+
+    /*
+     * Canary Placement:
+     * Write 8-byte canary (0xDEADBEEFCAFEBABE) immediately after requested bytes.
+     * Fill remaining slack up to curr->size with CANARY_PAD_BYTE (0xA5).
+     */
+    char *payload = (char *)curr + sizeof(block_header_t);
+    uint64_t canary = CANARY_MAGIC;
+    memcpy(payload + u_size, &canary, sizeof(uint64_t));
+
+    size_t slack_start = u_size + sizeof(uint64_t);
+    if (curr->size > slack_start) {
+        memset(payload + slack_start, CANARY_PAD_BYTE, curr->size - slack_start);
+    }
 
     m_error = 0;
-    return (void *)((char *)curr + sizeof(block_header_t));
+    return (void *)payload;
 }
 
 /*
- * Mem_Free: Deallocate block (exact payload start or interior pointer).
- * Validates 8-Byte Trailing Canary (0xDEADBEEFCAFEBABE) to catch buffer overruns.
- * Performs immediate physical-neighbor coalescing with adjacent free blocks.
+ * Mem_Free: Deallocate block.
+ * Validates:
+ * 1. 8-Byte Trailing Canary immediately after requested bytes (payload + req_size).
+ * 2. Padding bytes (0xA5) covering all slack up to block->size.
+ * If canary or padding is overwritten, returns -1 and sets m_error = E_PADDING_OVERWRITTEN.
+ * Performs immediate hardened physical-neighbor coalescing.
  */
 int Mem_Free(void *ptr) {
     if (ptr == NULL) {
@@ -344,39 +435,89 @@ int Mem_Free(void *ptr) {
         return -1;
     }
 
-    /* Verify 8-Byte Trailing Canary Footer */
-    uint64_t *canary_ptr = (uint64_t *)((char *)block + sizeof(block_header_t) + block->size - 8);
-    if (*canary_ptr != CANARY_MAGIC) {
+    char *payload = (char *)block + sizeof(block_header_t);
+    size_t req_sz = block->req_size;
+    size_t canary_end = req_sz + sizeof(uint64_t);
+
+    if (canary_end > block->size) {
         m_error = E_PADDING_OVERWRITTEN;
         return -1;
     }
 
-    /* Clear canary in free block */
-    *canary_ptr = 0;
-
-    /* Coalesce with next physical block if free */
-    if (block->next_phys != NULL && block->next_phys->is_free) {
-        block_header_t *next = block->next_phys;
-        remove_from_bin(next);
-        block->size += sizeof(block_header_t) + next->size;
-        block->next_phys = next->next_phys;
-        if (block->next_phys != NULL) {
-            block->next_phys->prev_phys = block;
-        }
-        next->magic = 0;
+    /* Verify 8-Byte Trailing Canary Footer via memcpy (avoids unaligned load fault) */
+    uint64_t canary_read = 0;
+    memcpy(&canary_read, payload + req_sz, sizeof(uint64_t));
+    if (canary_read != CANARY_MAGIC) {
+        m_error = E_PADDING_OVERWRITTEN;
+        return -1;
     }
 
-    /* Coalesce with prev physical block if free */
-    if (block->prev_phys != NULL && block->prev_phys->is_free) {
-        block_header_t *prev = block->prev_phys;
-        remove_from_bin(prev);
-        prev->size += sizeof(block_header_t) + block->size;
-        prev->next_phys = block->next_phys;
-        if (prev->next_phys != NULL) {
-            prev->next_phys->prev_phys = prev;
+    /* Verify padding bytes covering slack between canary and block boundary */
+    for (size_t i = canary_end; i < block->size; i++) {
+        if ((unsigned char)payload[i] != CANARY_PAD_BYTE) {
+            m_error = E_PADDING_OVERWRITTEN;
+            return -1;
         }
-        block->magic = 0;
-        insert_into_bin(prev);
+    }
+
+    /* Clear canary, padding, and requested size metadata before returning to pool */
+    memset(payload + req_sz, 0, sizeof(uint64_t));
+    block->req_size = 0;
+    block->_pad_alloc = 0;
+    block->prev_free = NULL;
+    block->next_free = NULL;
+
+    /*
+     * Hardened Coalescing with next physical block:
+     * Validates bounds, magic constant, and bidirectional physical linkage.
+     */
+    if (block->next_phys != NULL) {
+        if ((char *)block->next_phys < (char *)arena_start ||
+            (char *)block->next_phys >= (char *)arena_end ||
+            block->next_phys->magic != BLOCK_MAGIC ||
+            block->next_phys->prev_phys != block) {
+            m_error = E_CORRUPT_FREESPACE;
+            return -1;
+        }
+
+        if (block->next_phys->is_free) {
+            block_header_t *next = block->next_phys;
+            remove_from_bin(next);
+            block->size += sizeof(block_header_t) + next->size;
+            block->next_phys = next->next_phys;
+            if (block->next_phys != NULL) {
+                block->next_phys->prev_phys = block;
+            }
+            next->magic = 0;
+        }
+    }
+
+    /*
+     * Hardened Coalescing with prev physical block:
+     * Validates bounds, magic constant, and bidirectional physical linkage.
+     */
+    if (block->prev_phys != NULL) {
+        if ((char *)block->prev_phys < (char *)arena_start ||
+            (char *)block->prev_phys >= (char *)arena_end ||
+            block->prev_phys->magic != BLOCK_MAGIC ||
+            block->prev_phys->next_phys != block) {
+            m_error = E_CORRUPT_FREESPACE;
+            return -1;
+        }
+
+        if (block->prev_phys->is_free) {
+            block_header_t *prev = block->prev_phys;
+            remove_from_bin(prev);
+            prev->size += sizeof(block_header_t) + block->size;
+            prev->next_phys = block->next_phys;
+            if (prev->next_phys != NULL) {
+                prev->next_phys->prev_phys = prev;
+            }
+            block->magic = 0;
+            insert_into_bin(prev);
+        } else {
+            insert_into_bin(block);
+        }
     } else {
         insert_into_bin(block);
     }
@@ -387,6 +528,7 @@ int Mem_Free(void *ptr) {
 
 /*
  * Mem_Dump: Diagnostic utility printing memory map and segregated bin status.
+ * Hardened with step limit to prevent infinite loops if next_phys is corrupted.
  */
 void Mem_Dump(void) {
     if (!is_initialized || arena_start == NULL) {
@@ -402,6 +544,8 @@ void Mem_Dump(void) {
            "Index", "Header Address", "Payload Address", "Size (bytes)", "Status");
     printf("-----------------------------------------------------------------------------------\n");
 
+    size_t max_steps = arena_size / sizeof(block_header_t) + 1;
+    size_t steps = 0;
     block_header_t *curr = (block_header_t *)arena_start;
     size_t index = 0;
     size_t count_alloc = 0;
@@ -409,7 +553,7 @@ void Mem_Dump(void) {
     size_t bytes_alloc = 0;
     size_t bytes_free = 0;
 
-    while (curr != NULL && (char *)curr < (char *)arena_end) {
+    while (curr != NULL && (char *)curr < (char *)arena_end && steps++ < max_steps) {
         if (curr->magic != BLOCK_MAGIC) {
             printf("[CORRUPT BLOCK METADATA DETECTED at address %p! Magic: 0x%08X]\n",
                    (void *)curr, curr->magic);
@@ -468,6 +612,12 @@ size_t Mem_GetArenaSize(void) {
     return arena_size;
 }
 
+#ifdef MEM_TESTING
+/*
+ * Mem_Reset: Unmaps arena and resets allocator state.
+ * Only compiled into test binaries and dev bridge under MEM_TESTING.
+ * Excluded from the shipped production library.
+ */
 int Mem_Reset(void) {
     if (is_initialized && arena_start != NULL && arena_size > 0) {
         munmap(arena_start, arena_size);
@@ -483,3 +633,4 @@ int Mem_Reset(void) {
     }
     return 0;
 }
+#endif

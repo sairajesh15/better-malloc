@@ -15,8 +15,14 @@ extern "C" {
 #define E_BAD_ARGS             4
 #define E_BAD_POINTER          5
 
-/* 8-Byte Trailing Canary Constant */
+/* 8-Byte Trailing Canary Constant & Padding Byte */
 #define CANARY_MAGIC           0xDEADBEEFCAFEBABEU
+#define CANARY_PAD_BYTE        0xA5
+
+/* Default Payload Alignment (16-byte aligned, 48 % 16 == 0) */
+#ifndef MEM_ALIGN
+#define MEM_ALIGN              16
+#endif
 
 /* Number of Segregated Free List Bins */
 #define NUM_BINS               8
@@ -36,7 +42,10 @@ int   Mem_GetMmapCount(void);
 int   Mem_GetBinIndex(size_t size);
 void *Mem_GetArenaStart(void);
 size_t Mem_GetArenaSize(void);
+
+#ifdef MEM_TESTING
 int   Mem_Reset(void);
+#endif
 
 #ifdef __cplusplus
 }

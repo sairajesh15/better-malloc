@@ -20,9 +20,11 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 os.chdir(BASE_DIR)
 
 # -----------------------------------------------------------------------------
-# C Shared Library ctypes Interface (libmem.so)
+# C Shared Library ctypes Interface (libmem.so / libmem_test.so)
 # -----------------------------------------------------------------------------
-LIBMEM_PATH = os.path.join(BASE_DIR, "libmem.so")
+LIBMEM_TEST_PATH = os.path.join(BASE_DIR, "libmem_test.so")
+LIBMEM_PROD_PATH = os.path.join(BASE_DIR, "libmem.so")
+LIBMEM_PATH = LIBMEM_TEST_PATH if os.path.exists(LIBMEM_TEST_PATH) else LIBMEM_PROD_PATH
 REAL_RUNNER_PATH = os.path.join(BASE_DIR, "real_runner")
 lib = None
 libc = None
@@ -35,7 +37,7 @@ class BlockHeader(ctypes.Structure):
         ("magic", ctypes.c_uint32),
         ("prev_phys", ctypes.c_void_p),
         ("next_phys", ctypes.c_void_p),
-        ("prev_free", ctypes.c_void_p),
+        ("prev_free", ctypes.c_void_p), # Overlaid with req_size when allocated
         ("next_free", ctypes.c_void_p),
     ]
 
@@ -65,16 +67,19 @@ def load_libmem():
     lib.Mem_GetArenaStart.restype = ctypes.c_void_p
     lib.Mem_GetArenaSize.argtypes = []
     lib.Mem_GetArenaSize.restype = ctypes.c_size_t
-    lib.Mem_Reset.argtypes = []
-    lib.Mem_Reset.restype = ctypes.c_int
+    if hasattr(lib, "Mem_Reset"):
+        lib.Mem_Reset.argtypes = []
+        lib.Mem_Reset.restype = ctypes.c_int
 
     libc.fflush.argtypes = [ctypes.c_void_p]
     libc.fflush.restype = ctypes.c_int
 
     print(f"[OK] Successfully loaded {LIBMEM_PATH} via ctypes")
     # Auto-initialize default 32 KB arena
-    lib.Mem_Reset()
-    lib.Mem_Init(32768)
+    if hasattr(lib, "Mem_Reset"):
+        lib.Mem_Reset()
+    if not lib.Mem_GetArenaStart():
+        lib.Mem_Init(32768)
     start_addr = lib.Mem_GetArenaStart()
     print(f"[OK] Initialized default 32 KB arena at 0x{start_addr:09x}")
 
@@ -194,20 +199,20 @@ def inspect_arena():
         payload_preview = ""
         hex_preview = ""
 
-        if not is_free and block_size >= 8:
-            canary_addr = payload_addr + block_size - 8
+        req_sz = hdr.prev_free or (block_size - 8)
+        if not is_free and req_sz > 0 and (req_sz + 8) <= block_size:
+            canary_addr = payload_addr + req_sz
             canary_val = ctypes.c_uint64.from_address(canary_addr).value
             canary_val_hex = f"0x{canary_val:016X}"
             canary_intact = (canary_val == 0xDEADBEEFCAFEBABE)
 
             # Peek live string payload from RAM
-            usable_bytes = block_size - 8
-            peek_len = min(usable_bytes, 32)
+            peek_len = min(req_sz, 32)
             raw = ctypes.string_at(payload_addr, peek_len)
             payload_preview = "".join(chr(b) if 32 <= b <= 126 else "." for b in raw)
 
             # Live hex preview of first 16 bytes of payload
-            hex_len = min(usable_bytes, 16)
+            hex_len = min(req_sz, 16)
             hex_preview = " ".join(f"{b:02x}" for b in ctypes.string_at(payload_addr, hex_len))
 
         bin_idx = lib.Mem_GetBinIndex(block_size) if is_free else -1
@@ -576,7 +581,8 @@ class AllocatorBridgeHandler(SimpleHTTPRequestHandler):
 
             if target_ptr:
                 hdr = BlockHeader.from_address(target_ptr - 48)
-                canary_addr = target_ptr + hdr.size - 8
+                req_sz = hdr.prev_free or (hdr.size - 8)
+                canary_addr = target_ptr + req_sz
                 ctypes.c_uint64.from_address(canary_addr).value = 0xAAAAAAAAAAAAAAAA
                 log_msg = f"Corrupted canary at 0x{canary_addr:09x} to 0xAAAAAAAAAAAAAAAA"
                 extra_data = {"corrupted_addr": f"0x{canary_addr:09x}"}

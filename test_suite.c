@@ -103,6 +103,7 @@ static void test_pointer_alignment_and_integrity(void) {
 
         uintptr_t addr = (uintptr_t)ptrs[i];
         TEST_ASSERT((addr & 7) == 0, "Payload pointer must be strictly 8-byte aligned");
+        TEST_ASSERT((addr & 15) == 0, "Payload pointer must be strictly 16-byte aligned (MEM_ALIGN=16)");
 
         /* Fill memory within user payload bounds (all sizes[i] bytes safe before trailing canary) */
         size_t write_len = (size_t)sizes[i];
@@ -156,6 +157,23 @@ static void test_canary_buffer_overflow_detection(void) {
     /* Restore canary so we can clean up cleanly */
     *canary_location = CANARY_MAGIC;
     TEST_ASSERT(Mem_Free(p2) == 0, "Clean up after restoring canary");
+
+    /* Test slack padding byte (0xA5) corruption: allocate 17 bytes */
+    void *p3 = Mem_Alloc(17);
+    TEST_ASSERT(p3 != NULL, "Mem_Alloc(17) must succeed");
+
+    /* Canary occupies 8 bytes at p3 + 17; padding byte starts at p3 + 17 + 8 */
+    char *pad_location = (char *)p3 + 17 + 8;
+    *pad_location = 0x5A; /* Corrupted padding byte */
+
+    m_error = 0;
+    res = Mem_Free(p3);
+    TEST_ASSERT(res == -1, "Freeing buffer with corrupted padding byte must return -1");
+    TEST_ASSERT(m_error == E_PADDING_OVERWRITTEN, "m_error must be E_PADDING_OVERWRITTEN (3)");
+
+    /* Restore padding byte to clean up */
+    *pad_location = (char)CANARY_PAD_BYTE;
+    TEST_ASSERT(Mem_Free(p3) == 0, "Clean up after restoring padding byte");
 }
 
 /* ========================================================================= */
@@ -252,13 +270,27 @@ static void test_interior_pointers_and_bad_pointers(void) {
     void *p1 = Mem_Alloc(256);
     TEST_ASSERT(p1 != NULL, "Mem_Alloc(256) must succeed");
 
+#if MEM_ALLOW_INTERIOR
     res = Mem_Free((char *)p1 + 24);
-    TEST_ASSERT(res == 0, "Interior pointer (+24 B) free must succeed");
+    TEST_ASSERT(res == 0, "Interior pointer (+24 B) free must succeed when MEM_ALLOW_INTERIOR=1");
 
     m_error = 0;
     res = Mem_Free(p1);
     TEST_ASSERT(res == -1, "Double-free must fail");
-    TEST_ASSERT(m_error == E_BAD_POINTER, "Must set E_BAD_POINTER");
+    TEST_ASSERT(m_error == E_BAD_POINTER, "Must set E_BAD_POINTER on double free");
+#else
+    res = Mem_Free((char *)p1 + 24);
+    TEST_ASSERT(res == -1, "Interior pointer (+24 B) free must fail when MEM_ALLOW_INTERIOR=0");
+    TEST_ASSERT(m_error == E_BAD_POINTER, "Must set E_BAD_POINTER on interior pointer when MEM_ALLOW_INTERIOR=0");
+
+    res = Mem_Free(p1);
+    TEST_ASSERT(res == 0, "Exact pointer free must succeed when MEM_ALLOW_INTERIOR=0");
+
+    m_error = 0;
+    res = Mem_Free(p1);
+    TEST_ASSERT(res == -1, "Double-free of exact pointer must fail");
+    TEST_ASSERT(m_error == E_BAD_POINTER, "Must set E_BAD_POINTER on double free");
+#endif
 
     void *p2 = Mem_Alloc(128);
     TEST_ASSERT(p2 != NULL, "Mem_Alloc(128)");

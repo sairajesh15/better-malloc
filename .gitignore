@@ -1,0 +1,7 @@
+*.o
+*.so
+test_suite
+test_suite_interior
+bench_compare
+real_runner
+__pycache__/

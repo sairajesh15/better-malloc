@@ -423,6 +423,9 @@ int main(int argc, char *argv[]) {
 
     void *buf = Mem_Alloc(256);
     int interior_ok = (Mem_Free((char *)buf + 24) == 0);
+    if (!interior_ok) {
+        Mem_Free(buf);
+    }
 
     void *canary_buf = Mem_Alloc(128);
     /* Overwrite canary at end of block (+128 bytes after payload) */

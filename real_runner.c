@@ -36,8 +36,16 @@ typedef struct block_header {
     uint32_t magic;
     struct block_header *prev_phys;
     struct block_header *next_phys;
-    struct block_header *prev_free;
-    struct block_header *next_free;
+    union {
+        struct {
+            struct block_header *prev_free;
+            struct block_header *next_free;
+        };
+        struct {
+            size_t req_size;
+            uint64_t _pad_alloc;
+        };
+    };
 } block_header_t;
 
 /* 10-Bucket Histogram Structure */
@@ -439,9 +447,9 @@ static int run_parse_mode(const char *filename, const char *free_pattern, int ma
 
         uint64_t canary_val = 0;
         int canary_ok = 0;
-        if (!curr->is_free && curr->size >= 8) {
-            uint64_t *cp = (uint64_t *)((char *)curr + sizeof(block_header_t) + curr->size - 8);
-            canary_val = *cp;
+        if (!curr->is_free && curr->req_size > 0 && curr->req_size + sizeof(uint64_t) <= curr->size) {
+            char *payload = (char *)curr + sizeof(block_header_t);
+            memcpy(&canary_val, payload + curr->req_size, sizeof(uint64_t));
             canary_ok = (canary_val == CANARY_MAGIC);
         }
 
