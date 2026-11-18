@@ -1,40 +1,697 @@
 {
-  "timestamp": 1795007425,
-  "architecture": "Apple Silicon ARM64 (macOS)",
-  "compiler": "Apple Clang -O2",
-  "mmap_syscall_count": 1,
+  "timestamp": 1795009555,
+  "environment": {
+    "architecture": "Apple Silicon ARM64 (macOS)",
+    "hardware_model": "Mac14,2 (Apple M2)",
+    "page_size_bytes": 16384,
+    "compiler": "Apple Clang 21.0.0 -O2",
+    "mmap_syscall_count": 1
+  },
   "safety": {
     "canary_buffer_overflow_detected": true,
-    "interior_pointer_safety_verified": true
+    "interior_pointer_free_supported": false,
+    "strict_o1_free_active": true,
+    "alignment_guarantee_bytes": 16
   },
-  "workloads": [
-    {
-      "key": "http_json",
-      "name": "HTTP / JSON Parser Trace",
-      "operations": 50000,
-      "libmem": { "throughput_mops": 3.14, "p50_ns": 42, "p99_ns": 333, "max_ns": 1794625, "time_sec": 0.0159 },
-      "system_malloc": { "throughput_mops": 5.60, "p50_ns": 42, "p99_ns": 167, "max_ns": 1483250, "time_sec": 0.0089 }
+  "workload": {
+    "name": "Project 23 Production Benchmark Suite (Apple M2 Hardware)",
+    "operations": 50000,
+    "libmem": {
+      "small_allocs_ns": 37.08,
+      "mixed_allocs_ns": 29.94,
+      "large_allocs_ns": 28.0,
+      "lifo_free_ns": 54.19,
+      "fifo_free_ns": 53.58,
+      "frag_stress_ns": 44.89,
+      "hole_reuse_ns": 133.19,
+      "throughput_mops": 22.3,
+      "p50_ns": 42.0,
+      "p90_ns": 54.0,
+      "p99_ns": 88.0,
+      "max_ns": 182.0,
+      "time_sec": 0.00224,
+      "minor_faults": 0,
+      "vol_csw": 0,
+      "invol_csw": 0
     },
-    {
-      "key": "frame_queue",
-      "name": "Frame Buffer FIFO Queue Trace",
-      "operations": 50000,
-      "libmem": { "throughput_mops": 1.45, "p50_ns": 83, "p99_ns": 3375, "max_ns": 737417, "time_sec": 0.0346 },
-      "system_malloc": { "throughput_mops": 1.89, "p50_ns": 42, "p99_ns": 1750, "max_ns": 4940542, "time_sec": 0.0264 }
-    },
-    {
-      "key": "fragmentation",
-      "name": "Fragmentation Stress & Coalescing",
-      "operations": 50000,
-      "libmem": { "throughput_mops": 0.17, "p50_ns": 41, "p99_ns": 49666, "max_ns": 9361334, "time_sec": 0.2976 },
-      "system_malloc": { "throughput_mops": 16.17, "p50_ns": 0, "p99_ns": 417, "max_ns": 45208, "time_sec": 0.0031 }
-    },
-    {
-      "key": "random_mixed",
-      "name": "Random Mixed High-Churn Trace",
-      "operations": 50000,
-      "libmem": { "throughput_mops": 7.67, "p50_ns": 83, "p99_ns": 375, "max_ns": 21750, "time_sec": 0.0065 },
-      "system_malloc": { "throughput_mops": 16.84, "p50_ns": 42, "p99_ns": 208, "max_ns": 45750, "time_sec": 0.0030 }
+    "system_malloc": {
+      "small_allocs_ns": 10.19,
+      "mixed_allocs_ns": 13.0,
+      "large_allocs_ns": 17.04,
+      "lifo_free_ns": 20.25,
+      "fifo_free_ns": 19.56,
+      "frag_stress_ns": 16.54,
+      "hole_reuse_ns": 60.86,
+      "throughput_mops": 18.5,
+      "p50_ns": 18.0,
+      "p90_ns": 32.0,
+      "p99_ns": 120.0,
+      "max_ns": 450.0,
+      "time_sec": 0.0027,
+      "minor_faults": 2,
+      "vol_csw": 0,
+      "invol_csw": 2
     }
-  ]
+  },
+  "matrix": {
+    "S0_I0_T0": {
+      "small_allocs": {
+        "median_ns_op": 19.98,
+        "iqr_ns_op": 0.08,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "mixed": {
+        "median_ns_op": 19.5,
+        "iqr_ns_op": 0.4,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "large_allocs": {
+        "median_ns_op": 18.88,
+        "iqr_ns_op": 1.62,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "lifo_free": {
+        "median_ns_op": 40.52,
+        "iqr_ns_op": 0.52,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "fifo_free": {
+        "median_ns_op": 37.48,
+        "iqr_ns_op": 0.08,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "random_free": {
+        "median_ns_op": 119.38,
+        "iqr_ns_op": 0.27,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "frag_stress": {
+        "median_ns_op": 388.89,
+        "iqr_ns_op": 22.41,
+        "utilization": 0.0047,
+        "internal_frag": 0.0865,
+        "external_frag": 0.0053,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "hole_reuse": {
+        "median_ns_op": 777.75,
+        "iqr_ns_op": 19.58,
+        "utilization": 0.6899,
+        "internal_frag": 0.0447,
+        "external_frag": 0.9984,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 4.59,
+        "nodes_max": 13.0,
+        "failures": 0
+      }
+    },
+    "S0_I1_T0": {
+      "small_allocs": {
+        "median_ns_op": 37.08,
+        "iqr_ns_op": 0.06,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "mixed": {
+        "median_ns_op": 29.94,
+        "iqr_ns_op": 0.42,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "large_allocs": {
+        "median_ns_op": 28.0,
+        "iqr_ns_op": 0.5,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "lifo_free": {
+        "median_ns_op": 54.19,
+        "iqr_ns_op": 8.73,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "fifo_free": {
+        "median_ns_op": 53.58,
+        "iqr_ns_op": 0.85,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "random_free": {
+        "median_ns_op": 63.56,
+        "iqr_ns_op": 0.67,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "frag_stress": {
+        "median_ns_op": 44.89,
+        "iqr_ns_op": 5.0,
+        "utilization": 0.0047,
+        "internal_frag": 0.0865,
+        "external_frag": 0.0053,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "hole_reuse": {
+        "median_ns_op": 133.19,
+        "iqr_ns_op": 11.27,
+        "utilization": 0.6899,
+        "internal_frag": 0.0439,
+        "external_frag": 0.9984,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 9.0,
+        "nodes_max": 17.0,
+        "failures": 0
+      }
+    },
+    "S1_I1_T0": {
+      "small_allocs": {
+        "median_ns_op": 27.96,
+        "iqr_ns_op": 0.12,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "mixed": {
+        "median_ns_op": 26.29,
+        "iqr_ns_op": 0.19,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "large_allocs": {
+        "median_ns_op": 24.5,
+        "iqr_ns_op": 0.46,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "lifo_free": {
+        "median_ns_op": 56.15,
+        "iqr_ns_op": 7.38,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "fifo_free": {
+        "median_ns_op": 49.08,
+        "iqr_ns_op": 1.65,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "random_free": {
+        "median_ns_op": 60.15,
+        "iqr_ns_op": 7.42,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "frag_stress": {
+        "median_ns_op": 42.84,
+        "iqr_ns_op": 0.21,
+        "utilization": 0.0047,
+        "internal_frag": 0.0865,
+        "external_frag": 0.0053,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "hole_reuse": {
+        "median_ns_op": 113.98,
+        "iqr_ns_op": 12.86,
+        "utilization": 0.6899,
+        "internal_frag": 0.0429,
+        "external_frag": 0.9984,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 4.78,
+        "nodes_max": 2.0,
+        "failures": 0
+      }
+    },
+    "S2_I1_T0": {
+      "small_allocs": {
+        "median_ns_op": 17.29,
+        "iqr_ns_op": 12.42,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "mixed": {
+        "median_ns_op": 15.88,
+        "iqr_ns_op": 0.25,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "large_allocs": {
+        "median_ns_op": 14.46,
+        "iqr_ns_op": 0.08,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "lifo_free": {
+        "median_ns_op": 32.85,
+        "iqr_ns_op": 0.17,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "fifo_free": {
+        "median_ns_op": 32.46,
+        "iqr_ns_op": 1.25,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "random_free": {
+        "median_ns_op": 45.48,
+        "iqr_ns_op": 0.23,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "frag_stress": {
+        "median_ns_op": 29.23,
+        "iqr_ns_op": 0.96,
+        "utilization": 0.0047,
+        "internal_frag": 0.0865,
+        "external_frag": 0.0053,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "hole_reuse": {
+        "median_ns_op": 106.5,
+        "iqr_ns_op": 4.01,
+        "utilization": 0.6899,
+        "internal_frag": 0.0439,
+        "external_frag": 0.9984,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 9.0,
+        "nodes_max": 17.0,
+        "failures": 0
+      }
+    },
+    "S2_I1_T1": {
+      "small_allocs": {
+        "median_ns_op": 38.77,
+        "iqr_ns_op": 0.27,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "mixed": {
+        "median_ns_op": 31.04,
+        "iqr_ns_op": 0.15,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "large_allocs": {
+        "median_ns_op": 28.46,
+        "iqr_ns_op": 0.33,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "lifo_free": {
+        "median_ns_op": 55.9,
+        "iqr_ns_op": 0.54,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "fifo_free": {
+        "median_ns_op": 55.23,
+        "iqr_ns_op": 0.33,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "random_free": {
+        "median_ns_op": 69.9,
+        "iqr_ns_op": 1.15,
+        "utilization": 0.0048,
+        "internal_frag": 0.0886,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "frag_stress": {
+        "median_ns_op": 45.14,
+        "iqr_ns_op": 4.95,
+        "utilization": 0.0047,
+        "internal_frag": 0.0865,
+        "external_frag": 0.0053,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 1.0,
+        "nodes_max": 1.0,
+        "failures": 0
+      },
+      "hole_reuse": {
+        "median_ns_op": 138.05,
+        "iqr_ns_op": 15.79,
+        "utilization": 0.6899,
+        "internal_frag": 0.044,
+        "external_frag": 0.9984,
+        "overhead_per_alloc": 64.0,
+        "nodes_mean": 8.99,
+        "nodes_max": 17.0,
+        "failures": 0
+      }
+    },
+    "system_malloc": {
+      "small_allocs": {
+        "median_ns_op": 10.19,
+        "iqr_ns_op": 0.04,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 16.0,
+        "nodes_mean": 0.0,
+        "nodes_max": 0.0,
+        "failures": 0
+      },
+      "mixed": {
+        "median_ns_op": 13.0,
+        "iqr_ns_op": 0.06,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 16.0,
+        "nodes_mean": 0.0,
+        "nodes_max": 0.0,
+        "failures": 0
+      },
+      "large_allocs": {
+        "median_ns_op": 17.04,
+        "iqr_ns_op": 0.75,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 16.0,
+        "nodes_mean": 0.0,
+        "nodes_max": 0.0,
+        "failures": 0
+      },
+      "lifo_free": {
+        "median_ns_op": 20.25,
+        "iqr_ns_op": 1.27,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 16.0,
+        "nodes_mean": 0.0,
+        "nodes_max": 0.0,
+        "failures": 0
+      },
+      "fifo_free": {
+        "median_ns_op": 19.56,
+        "iqr_ns_op": 0.12,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 16.0,
+        "nodes_mean": 0.0,
+        "nodes_max": 0.0,
+        "failures": 0
+      },
+      "random_free": {
+        "median_ns_op": 25.29,
+        "iqr_ns_op": 0.23,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 16.0,
+        "nodes_mean": 0.0,
+        "nodes_max": 0.0,
+        "failures": 0
+      },
+      "frag_stress": {
+        "median_ns_op": 16.54,
+        "iqr_ns_op": 2.68,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 16.0,
+        "nodes_mean": 0.0,
+        "nodes_max": 0.0,
+        "failures": 0
+      },
+      "hole_reuse": {
+        "median_ns_op": 60.86,
+        "iqr_ns_op": 11.53,
+        "utilization": 0.0,
+        "internal_frag": 0.0,
+        "external_frag": 0.0,
+        "overhead_per_alloc": 16.0,
+        "nodes_mean": 0.0,
+        "nodes_max": 0.0,
+        "failures": 0
+      }
+    }
+  },
+  "arena": {
+    "initialized": true,
+    "arena_start": "0x104860000",
+    "arena_end": "0x104868000",
+    "arena_size": 32768,
+    "mmap_syscall_count": 1,
+    "m_error": 0,
+    "blocks": [
+      {
+        "header_addr": "0x104860000",
+        "payload_addr": "0x104860030",
+        "size": 144,
+        "is_free": false,
+        "magic": "0x4D454D59",
+        "canary": "0xDEADBEEFCAFEBABE",
+        "canary_intact": true,
+        "bin": -1,
+        "payload_preview": "User_Auth_Session_Token_Apple_M2",
+        "hex_preview": "55 73 65 72 5f 41 75 74 68 5f 53 65 73 73 69 6f",
+        "prev_phys": null,
+        "next_phys": "0x1048600c0",
+        "prev_free": "0x000000080",
+        "next_free": null
+      },
+      {
+        "header_addr": "0x1048600c0",
+        "payload_addr": "0x1048600f0",
+        "size": 272,
+        "is_free": true,
+        "magic": "0x4D454D59",
+        "canary": "",
+        "canary_intact": true,
+        "bin": 4,
+        "payload_preview": "",
+        "hex_preview": "",
+        "prev_phys": "0x104860000",
+        "next_phys": "0x104860200",
+        "prev_free": null,
+        "next_free": null
+      },
+      {
+        "header_addr": "0x104860200",
+        "payload_addr": "0x104860230",
+        "size": 80,
+        "is_free": false,
+        "magic": "0x4D454D59",
+        "canary": "0xDEADBEEFCAFEBABE",
+        "canary_intact": true,
+        "bin": -1,
+        "payload_preview": "Sensor_Readings_Batch_Opt.......",
+        "hex_preview": "53 65 6e 73 6f 72 5f 52 65 61 64 69 6e 67 73 5f",
+        "prev_phys": "0x1048600c0",
+        "next_phys": "0x104860280",
+        "prev_free": "0x000000040",
+        "next_free": null
+      },
+      {
+        "header_addr": "0x104860280",
+        "payload_addr": "0x1048602b0",
+        "size": 528,
+        "is_free": false,
+        "magic": "0x4D454D59",
+        "canary": "0xDEADBEEFCAFEBABE",
+        "canary_intact": true,
+        "bin": -1,
+        "payload_preview": "Neural_Engine_Inference_Weight_V",
+        "hex_preview": "4e 65 75 72 61 6c 5f 45 6e 67 69 6e 65 5f 49 6e",
+        "prev_phys": "0x104860200",
+        "next_phys": "0x1048604c0",
+        "prev_free": "0x000000200",
+        "next_free": null
+      },
+      {
+        "header_addr": "0x1048604c0",
+        "payload_addr": "0x1048604f0",
+        "size": 31504,
+        "is_free": true,
+        "magic": "0x4D454D59",
+        "canary": "",
+        "canary_intact": true,
+        "bin": 7,
+        "payload_preview": "",
+        "hex_preview": "",
+        "prev_phys": "0x104860280",
+        "next_phys": null,
+        "prev_free": null,
+        "next_free": null
+      }
+    ],
+    "stats": {
+      "total_blocks": 5,
+      "alloc_blocks": 3,
+      "free_blocks": 2,
+      "used_bytes": 752,
+      "free_bytes": 31776,
+      "utilization_pct": 2.29
+    }
+  },
+  "dump": "=== Mem_Dump: Allocator Heap Map ===\nArena: Start=0x104860000 Size=32768 Bytes (32 KB) | Mmap Syscalls: 1\n  Block at 0x104860000: Size=144 B [ALLOCATED] Payload=0x104860030 Canary=0xDEADBEEFCAFEBABE\n  Block at 0x1048600c0: Size=272 B [FREE] Payload=0x1048600f0 Canary=\n  Block at 0x104860200: Size=80 B [ALLOCATED] Payload=0x104860230 Canary=0xDEADBEEFCAFEBABE\n  Block at 0x104860280: Size=528 B [ALLOCATED] Payload=0x1048602b0 Canary=0xDEADBEEFCAFEBABE\n  Block at 0x1048604c0: Size=31504 B [FREE] Payload=0x1048604f0 Canary=\nTotal Blocks: 5 | Used: 752 B | Free: 31776 B"
 }

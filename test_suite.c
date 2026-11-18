@@ -338,7 +338,21 @@ static void test_fragmentation_and_first_fit(void) {
     for (int i = 0; i < NUM_FRAG_BLOCKS / 2; i++) {
         new_ptrs[i] = Mem_Alloc(128);
         TEST_ASSERT(new_ptrs[i] != NULL, "Allocating into holes");
-        TEST_ASSERT(new_ptrs[i] == ptrs[i * 2], "First-Fit should choose lowest available hole");
+
+#if (MEM_INSERT_POLICY == 0)
+        /* Address-Ordered Policy: Guarantees lowest-address hole reuse */
+        TEST_ASSERT(new_ptrs[i] == ptrs[i * 2], "Address-ordered First-Fit should choose lowest available hole");
+#else
+        /* LIFO Policy: Guarantees that an available freed hole that fits is reused without heap expansion */
+        int is_reused_hole = 0;
+        for (int k = 0; k < NUM_FRAG_BLOCKS; k += 2) {
+            if (new_ptrs[i] == ptrs[k]) {
+                is_reused_hole = 1;
+                break;
+            }
+        }
+        TEST_ASSERT(is_reused_hole, "Freed hole that fits must be reused");
+#endif
     }
 
     for (int i = 0; i < NUM_FRAG_BLOCKS / 2; i++) {

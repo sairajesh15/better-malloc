@@ -1,0 +1,63 @@
+cc -Wall -Wextra -O2 -DMEM_TESTING -fsanitize=undefined,address -c test_suite.c -o test_suite_sanitize.o
+cc -Wall -Wextra -O2 -DMEM_TESTING -fsanitize=undefined -fPIC -c mem.c -o mem_ubsan.o
+cc -shared -fPIC -fsanitize=undefined -o libmem_ubsan.so mem_ubsan.o
+cc -fsanitize=undefined,address -o test_suite_sanitize test_suite_sanitize.o -L. -lmem_ubsan -Wl,-rpath,.
+
+>>> RUNNING SANITIZED TEST SUITE (UBSan on allocator & harness, ASan on harness) <<<
+./test_suite_sanitize
+================================================================================
+   PROJECT 23: A 'BETTER' MALLOC - COMPREHENSIVE TEST SUITE (SEGREGATED BINS)   
+================================================================================
+
+[ RUN  ] test_uninitialized_and_bad_args
+--- Mem_Dump: Allocator uninitialized ---
+[ PASS ] test_uninitialized_and_bad_args
+
+[ RUN  ] test_page_rounding_and_double_init
+[ PASS ] test_page_rounding_and_double_init
+
+[ RUN  ] test_pointer_alignment_and_integrity
+[ PASS ] test_pointer_alignment_and_integrity
+
+[ RUN  ] test_canary_buffer_overflow_detection
+[ PASS ] test_canary_buffer_overflow_detection
+
+[ RUN  ] test_block_splitting_and_bins
+[ PASS ] test_block_splitting_and_bins
+
+[ RUN  ] test_coalescing_cases
+[ PASS ] test_coalescing_cases
+
+[ RUN  ] test_interior_pointers_and_bad_pointers
+[ PASS ] test_interior_pointers_and_bad_pointers
+
+[ RUN  ] test_fragmentation_and_first_fit
+[ PASS ] test_fragmentation_and_first_fit
+
+[ RUN  ] test_mem_check_integrity
+[ PASS ] test_mem_check_integrity
+
+[ RUN  ] test_randomized_stress
+[ PASS ] test_randomized_stress
+
+[ RUN  ] test_negative_cases
+[NEGATIVE TEST] 1-byte overflow at size 1                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 7                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 8                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 13                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 16                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 24                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 100                 : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow in unsplit slack (size 200/256): CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] Double free                                    : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Pointer into header (ptr - 8)                  : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Pointer outside arena                          : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Allocation size INT_MAX                        : CAUGHT (p = NULL, m_error = 1 [E_NO_SPACE])
+[NEGATIVE TEST] Allocation size 0                              : CAUGHT (p = NULL, m_error = 4 [E_BAD_ARGS])
+[NEGATIVE TEST] Allocation size -1                             : CAUGHT (p = NULL, m_error = 4 [E_BAD_ARGS])
+[ PASS ] test_negative_cases
+
+--------------------------------------------------------------------------------
+TEST RESULTS: 11 / 11 Tests Passed (100.0% Success Rate)
+--------------------------------------------------------------------------------
+

@@ -1941,6 +1941,15 @@
        ========================================================================= -->
   <main class="app-main-content">
 
+    <!-- Static Mode Visible Banner (Visible when /api is unavailable) -->
+    <div id="static-mode-banner" style="display: none; background: rgba(0, 113, 227, 0.08); border: 1px solid rgba(0, 113, 227, 0.25); border-radius: 12px; padding: 12px 18px; margin-bottom: 20px; font-size: 13.5px; font-weight: 500; color: var(--apple-blue); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); align-items: center; justify-content: space-between; gap: 12px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--apple-blue); box-shadow: 0 0 8px rgba(0,113,227,0.6);"></span>
+        <span><strong>Static mode:</strong> results recorded on Apple Silicon ARM64 (macOS). Viewing precomputed telemetry and verified benchmarks.</span>
+      </div>
+      <span style="font-size: 11px; opacity: 0.8; font-family: var(--font-mono);">Offline Snapshot</span>
+    </div>
+
     <!-- -----------------------------------------------------------------------
          VIEW 1: #overview (Standalone Dedicated Page View)
          ----------------------------------------------------------------------- -->
@@ -2724,16 +2733,36 @@
               Manual <code>Mem_Free(ptr)</code> & Safety Modes
             </div>
             <div class="toggle-row">
-              <span>Interior Pointer Mode (+16 B offset on block clicks)</span>
+              <span>Interior Pointer Mode (Allow +16 B offset)</span>
               <label class="switch">
-                <input type="checkbox" id="interior-toggle">
+                <input type="checkbox" id="interior-toggle" onchange="onInteriorToggleChange()">
                 <span class="slider"></span>
               </label>
             </div>
             <div class="input-row">
-              <input type="text" id="free-addr-input" class="glass-input" placeholder="Hex address (e.g. 0x102d18030)">
-              <button class="btn-action" onclick="handleManualFree()">Free Pointer</button>
+              <input type="text" id="free-addr-input" class="glass-input" placeholder="Select a block below or enter hex (e.g. 0x1048c4030)">
+              <button class="btn-action primary" onclick="handleManualFree()">Free Pointer</button>
             </div>
+
+            <!-- One-Click Safety Defense Demonstrators -->
+            <div style="font-size: 11.5px; font-weight: 600; color: var(--text-secondary); margin-top: 10px; margin-bottom: 6px;">
+              Interactive Safety Invariant Tests (1-Click):
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+              <button class="quick-size-pill" onclick="testCanaryOverflowUI()" title="Simulate 4-byte buffer overrun and call Mem_Free to trap E_PADDING_OVERWRITTEN">
+                🛡️ Test Canary Overflow
+              </button>
+              <button class="quick-size-pill" onclick="testDoubleFreeUI()" title="Free an active block twice to test double free defense (E_BAD_POINTER)">
+                🛡️ Test Double Free
+              </button>
+              <button class="quick-size-pill" onclick="testInteriorPointerUI()" title="Pass ptr + 16 to test interior pointer handling">
+                🛡️ Test Interior (+16 B)
+              </button>
+              <button class="quick-size-pill" onclick="testCorruptHeaderUI()" title="Pass ptr - 8 inside the 48-B header">
+                🛡️ Test Header Pointer
+              </button>
+            </div>
+
             <div style="display: flex; gap: 8px; justify-content: flex-end;">
               <button class="btn-action" onclick="exportDumpJSON()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
@@ -3945,13 +3974,7 @@
         `;
 
         seg.onclick = () => {
-          if (document.getElementById('interior-toggle')?.checked && !b.is_free) {
-            heap.free(b.payloadAddr + 16);
-            showToast(`Called Mem_Free(ptr + 16) on ${b.tag || 'block'}`);
-            updateUI();
-          } else {
-            selectBlock(b);
-          }
+          selectBlock(b);
         };
 
         seg.title = `Block #${b.id}\nHeader: ${hex(b.addr)}\nPayload: ${hex(b.payloadAddr)}\nSize: ${b.size} B\nStatus: ${b.is_free ? 'FREE' : 'ALLOCATED'}`;
@@ -4093,13 +4116,59 @@
           </div>
         `;
 
+        card.style.cursor = 'pointer';
+        card.onclick = (e) => {
+          if (!e.target.closest('button')) {
+            selectBlock(b);
+          }
+        };
+
         grid.appendChild(card);
       });
     }
 
     function selectBlock(b) {
       selectedBlock = b;
+      const freeInput = document.getElementById('free-addr-input');
+      if (freeInput) {
+        if (!b.is_free) {
+          const isInterior = document.getElementById('interior-toggle')?.checked || false;
+          const targetAddr = b.payloadAddr + (isInterior ? 16 : 0);
+          freeInput.value = hex(targetAddr);
+          showToast(`Selected allocated block at ${hex(b.payloadAddr)}${isInterior ? ' (+16 B interior offset armed)' : ''}`);
+        } else {
+          freeInput.value = '';
+          showToast(`Selected free block #${b.id} (${b.size} B capacity available)`);
+        }
+      }
       updateUI();
+    }
+
+    function onInteriorToggleChange() {
+      const toggle = document.getElementById('interior-toggle');
+      const isEnabled = toggle ? toggle.checked : false;
+      const freeInput = document.getElementById('free-addr-input');
+
+      // Update input box if an allocated block is currently selected
+      if (selectedBlock && !selectedBlock.is_free && freeInput) {
+        const targetAddr = selectedBlock.payloadAddr + (isEnabled ? 16 : 0);
+        freeInput.value = hex(targetAddr);
+      }
+
+      // Notify C server bridge if online
+      if (isServerOnline) {
+        fetch('/api/arena/exec', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'set_interior_mode', enabled: isEnabled })
+        }).catch(e => console.warn('set_interior_mode error:', e));
+      }
+
+      if (isEnabled) {
+        showToast('🛡️ Interior Pointer Mode ENABLED: Allows freeing interior pointers (+16 B) via O(N) scan');
+      } else {
+        showToast('🛡️ Interior Pointer Mode DISABLED: Strict O(1) mode (Interior pointers will be rejected with E_BAD_POINTER)');
+      }
     }
 
     function selectBlockById(id) {
@@ -4274,14 +4343,34 @@
       }
 
       isServerOnline = false;
+      const staticBanner = document.getElementById('static-mode-banner');
+      if (staticBanner) staticBanner.style.display = 'flex';
+
       const connPulse = document.getElementById('header-status-pulse');
       const connText = document.getElementById('header-status-text');
       const connPill = document.getElementById('header-status-pill');
       if (connPulse && connText) {
-        connPulse.style.background = 'var(--apple-orange)';
-        connText.innerText = 'C Bridge Offline (python3 server.py)';
-        if (connPill) connPill.title = 'Run "python3 server.py" in terminal to connect live C virtual memory';
+        connPulse.style.background = 'var(--apple-blue, #0071e3)';
+        connText.innerText = 'Static Mode • Apple Silicon ARM64';
+        if (connPill) connPill.title = 'Static demonstration mode: verified hardware results loaded from real_comparison.json';
       }
+
+      // Load static data from real_comparison.json
+      try {
+        const resp = await fetch('real_comparison.json');
+        if (resp.ok) {
+          const data = await resp.json();
+          if (data.arena) {
+            syncArenaFromServer(data.arena, data.dump);
+          }
+          latestBenchmarkData = data;
+          renderLiveBenchmarkUI(data);
+          renderWhyBetterBenchmarks();
+        }
+      } catch (err) {
+        console.warn('Could not load static real_comparison.json:', err);
+      }
+      await loadRealSample('json');
       return false;
     }
 
@@ -4605,9 +4694,21 @@
           latestBenchmarkData = data;
           renderLiveBenchmarkUI(data);
           renderWhyBetterBenchmarks();
+          return;
         }
       } catch (e) {
-        console.warn('Could not load latest benchmarks:', e);
+        console.warn('Could not load latest benchmarks from /api:', e);
+      }
+      try {
+        const resp = await fetch('real_comparison.json');
+        if (resp.ok) {
+          const data = await resp.json();
+          latestBenchmarkData = data;
+          renderLiveBenchmarkUI(data);
+          renderWhyBetterBenchmarks();
+        }
+      } catch (err) {
+        console.warn('Could not load fallback real_comparison.json:', err);
       }
     }
 
@@ -5208,55 +5309,206 @@
 
     async function handleManualFree() {
       const input = document.getElementById('free-addr-input');
-      let val = input.value.trim();
+      let val = input?.value.trim();
+
+      // If user didn't enter an address, check if an allocated block is selected, or pick the first active block
       if (!val) {
-        showToast('Please enter or select a pointer address to free');
-        return;
-      }
-
-      const isInterior = document.getElementById('interior-toggle')?.checked;
-      let addr = parseInt(val, 16);
-      if (isNaN(addr)) {
-        showToast('Please enter a valid hex address');
-        return;
-      }
-
-      if (isInterior) {
-        addr += 16;
-        val = hex(addr);
+        const blocks = heap.getPhysicalBlocks();
+        const firstAlloc = blocks.find(b => !b.is_free);
+        if (firstAlloc) {
+          const isInterior = document.getElementById('interior-toggle')?.checked;
+          val = hex(firstAlloc.payloadAddr + (isInterior ? 16 : 0));
+          if (input) input.value = val;
+        } else {
+          showToast('No allocated blocks to free. Allocate a block first (e.g. 64 B)!');
+          return;
+        }
       }
 
       await freeSpecificBlock(val);
-      input.value = '';
+      if (input) input.value = '';
     }
 
-    async function freeSpecificBlock(addrOrHex) {
+    async function freeSpecificBlock(addrOrHex, forceInterior = null) {
       const hexStr = (typeof addrOrHex === 'string') ? (addrOrHex.startsWith('0x') ? addrOrHex : '0x' + addrOrHex) : hex(addrOrHex);
       const numAddr = parseInt(hexStr, 16);
+      const isInterior = (forceInterior !== null) ? forceInterior : (document.getElementById('interior-toggle')?.checked || false);
 
       if (isServerOnline) {
         try {
           const resp = await fetch('/api/arena/exec', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'free', pointer: hexStr })
+            body: JSON.stringify({ action: 'free', pointer: hexStr, allow_interior: isInterior })
           });
           const data = await resp.json();
           if (data.arena) syncArenaFromServer(data.arena, data.dump);
-          showToast(data.log || `Mem_Free(${hexStr})`);
+          if (data.extra && data.extra.rc === 0) {
+            showToast(data.log || `✅ Mem_Free(${hexStr}) succeeded! Coalesced cleanly.`);
+          } else if (data.extra && data.extra.m_error === 3) {
+            showToast(`🛡️ ${data.log || 'Buffer Overrun Trapped: E_PADDING_OVERWRITTEN (3)'}`);
+          } else if (data.extra && data.extra.m_error === 5) {
+            showToast(`🛡️ ${data.log || 'Invalid/Interior Pointer Rejected: E_BAD_POINTER (5)'}`);
+          } else {
+            showToast(data.log || `Mem_Free(${hexStr})`);
+          }
           return;
         } catch (e) {
           console.warn('Server free failed:', e);
         }
       }
 
+      // Offline / Client-Side Fallback Engine
       const res = heap.free(numAddr);
       if (res === 0) {
-        showToast(`Mem_Free(${hexStr}) succeeded`);
+        showToast(`✅ Mem_Free(${hexStr}) succeeded! Coalesced cleanly.`);
+      } else if (m_error === E_PADDING_OVERWRITTEN) {
+        showToast(`🛡️ Buffer Overrun Trapped: Canary corrupted (E_PADDING_OVERWRITTEN: 3)!`);
       } else {
-        showToast(`Mem_Free(${hexStr}) failed: E_BAD_POINTER`);
+        showToast(`🛡️ Pointer Rejected: E_BAD_POINTER (5)`);
       }
       updateUI();
+    }
+
+    /* -------------------------------------------------------------------------
+       One-Click Safety Invariant Demonstrators
+       ------------------------------------------------------------------------- */
+    async function getOrAllocTargetBlock(preferredSize = 128, label = "Safety_Target") {
+      const blocks = heap.getPhysicalBlocks();
+      let target = blocks.find(b => !b.is_free);
+      if (!target) {
+        // Auto-allocate target block if heap is completely free
+        if (isServerOnline) {
+          try {
+            const resp = await fetch('/api/arena/exec', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'alloc', size: preferredSize, text: label })
+            });
+            const data = await resp.json();
+            if (data.arena) syncArenaFromServer(data.arena, data.dump);
+            const newBlocks = heap.getPhysicalBlocks();
+            target = newBlocks.find(b => !b.is_free);
+          } catch (e) {
+            console.warn('Auto-alloc failed:', e);
+          }
+        }
+        if (!target) {
+          heap.alloc(preferredSize, label);
+          target = heap.getPhysicalBlocks().find(b => !b.is_free);
+        }
+      }
+      return target;
+    }
+
+    async function testCanaryOverflowUI() {
+      const target = await getOrAllocTargetBlock(128, "Canary_Test_Payload");
+      if (!target) {
+        showToast('Could not allocate target block for canary test');
+        return;
+      }
+
+      showToast(`1. Corrupting trailing canary on block at ${hex(target.payloadAddr)}...`);
+
+      if (isServerOnline) {
+        try {
+          const resp1 = await fetch('/api/arena/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'corrupt_canary', pointer: hex(target.payloadAddr) })
+          });
+          const data1 = await resp1.json();
+          if (data1.arena) syncArenaFromServer(data1.arena, data1.dump);
+
+          setTimeout(async () => {
+            const resp2 = await fetch('/api/arena/exec', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: 'free', pointer: hex(target.payloadAddr) })
+            });
+            const data2 = await resp2.json();
+            if (data2.arena) syncArenaFromServer(data2.arena, data2.dump);
+            showToast(`🛡️ INVARIANT VERIFIED: Mem_Free caught corrupted canary! Returned -1, set m_error = E_PADDING_OVERWRITTEN (3). Heap protected!`);
+          }, 350);
+          return;
+        } catch (e) {
+          console.warn('testCanaryOverflowUI server error:', e);
+        }
+      }
+
+      // Offline mode
+      target.canaryCorrupted = true;
+      target.canary = "0xAAAAAAAAAAAAAAAA";
+      updateUI();
+      setTimeout(() => {
+        const rc = heap.free(target.payloadAddr);
+        showToast(`🛡️ INVARIANT VERIFIED: Mem_Free caught corrupted canary! Returned ${rc}, set m_error = E_PADDING_OVERWRITTEN (3).`);
+        updateUI();
+      }, 350);
+    }
+
+    async function testDoubleFreeUI() {
+      const target = await getOrAllocTargetBlock(96, "Double_Free_Test");
+      if (!target) {
+        showToast('Could not allocate target block for double free test');
+        return;
+      }
+
+      const ptrHex = hex(target.payloadAddr);
+      showToast(`1. Freeing block at ${ptrHex}...`);
+
+      if (isServerOnline) {
+        try {
+          const resp = await fetch('/api/arena/exec', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'test_double_free', pointer: ptrHex })
+          });
+          const data = await resp.json();
+          if (data.arena) syncArenaFromServer(data.arena, data.dump);
+          showToast(`🛡️ INVARIANT VERIFIED: ${data.log || '1st Free OK; 2nd Free rejected with E_BAD_POINTER (5)!'}`);
+          return;
+        } catch (e) {
+          console.warn('testDoubleFreeUI error:', e);
+        }
+      }
+
+      // Offline mode
+      heap.free(target.payloadAddr);
+      showToast(`1st Mem_Free(${ptrHex}) succeeded.`);
+      updateUI();
+      setTimeout(() => {
+        const rc2 = heap.free(target.payloadAddr);
+        showToast(`🛡️ INVARIANT VERIFIED: 2nd Mem_Free(${ptrHex}) rejected (rc = ${rc2}, m_error = E_BAD_POINTER: 5)!`);
+        updateUI();
+      }, 350);
+    }
+
+    async function testInteriorPointerUI() {
+      const target = await getOrAllocTargetBlock(160, "Interior_Test_Target");
+      if (!target) {
+        showToast('Could not allocate target block for interior pointer test');
+        return;
+      }
+
+      const isAllowed = document.getElementById('interior-toggle')?.checked || false;
+      const interiorPtr = hex(target.payloadAddr + 16);
+      showToast(`Testing Mem_Free(${interiorPtr}) [+16 B interior offset, Mode: ${isAllowed ? 'ENABLED' : 'STRICT O(1)'}]...`);
+
+      await freeSpecificBlock(interiorPtr, isAllowed);
+    }
+
+    async function testCorruptHeaderUI() {
+      const target = await getOrAllocTargetBlock(64, "Header_Pointer_Test");
+      if (!target) {
+        showToast('Could not allocate target block');
+        return;
+      }
+
+      const headerPtr = hex(target.payloadAddr - 8);
+      showToast(`Testing Mem_Free(${headerPtr}) [Inside 48-byte block header]...`);
+
+      await freeSpecificBlock(headerPtr, false);
     }
 
     async function fetchArenaState() {

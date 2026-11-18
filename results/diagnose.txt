@@ -1,0 +1,67 @@
+>>> RUNNING DIAGNOSTIC: Address-Ordered Insertion (MEM_INSERT_POLICY=0) <<<
+./diagnose_addr 50000
+================================================================================
+       PROJECT 23: PHASE 3a DIAGNOSTIC RUN - FRAGMENTATION WORKLOAD             
+================================================================================
+Parameters:
+  - Total Operations : 50000 (N = 25000 allocations + 25000 frees)
+  - Arena Size       : 64 MB (67108864 bytes)
+  - Allocator Policy : Segregated Bins (First-Fit Search, Address-Ordered Insertion)
+--------------------------------------------------------------------------------
+
+================================================================================
+                  PHASE 3a EMPIRICAL TELEMETRY RESULTS                          
+================================================================================
+1. Nodes Visited per Mem_Alloc Scan (Total Scans: 25000, Total Nodes: 25000):
+   - Mean :     1.00 nodes
+   - p50  :        1 nodes
+   - p90  :        1 nodes
+   - p99  :        1 nodes
+   - Max  :        1 nodes
+
+2. Nodes Visited per insert_into_bin Traversal (Total Inserts: 50000, Total Nodes: 41446778):
+   - Mean :   828.94 nodes
+   - p50  :        1 nodes
+   - p90  :     5820 nodes
+   - p99  :     8070 nodes
+   - Max  :     8319 nodes
+
+3. Lifecycle Mutation Counters:
+   - Total Block Splits     : 25000
+   - Total Block Coalesces  : 25000
+================================================================================
+
+
+>>> RUNNING DIAGNOSTIC: LIFO Insertion (MEM_INSERT_POLICY=1, Default) <<<
+./diagnose_fragmentation 50000
+================================================================================
+       PROJECT 23: PHASE 3a DIAGNOSTIC RUN - FRAGMENTATION WORKLOAD             
+================================================================================
+Parameters:
+  - Total Operations : 50000 (N = 25000 allocations + 25000 frees)
+  - Arena Size       : 64 MB (67108864 bytes)
+  - Allocator Policy : Segregated Bins (First-Fit Search, Address-Ordered Insertion)
+--------------------------------------------------------------------------------
+
+================================================================================
+                  PHASE 3a EMPIRICAL TELEMETRY RESULTS                          
+================================================================================
+1. Nodes Visited per Mem_Alloc Scan (Total Scans: 25000, Total Nodes: 25000):
+   - Mean :     1.00 nodes
+   - p50  :        1 nodes
+   - p90  :        1 nodes
+   - p99  :        1 nodes
+   - Max  :        1 nodes
+
+2. Nodes Visited per insert_into_bin Traversal (Total Inserts: 50000, Total Nodes: 0):
+   - Mean :     0.00 nodes
+   - p50  :        0 nodes
+   - p90  :        0 nodes
+   - p99  :        0 nodes
+   - Max  :        0 nodes
+
+3. Lifecycle Mutation Counters:
+   - Total Block Splits     : 25000
+   - Total Block Coalesces  : 25000
+================================================================================
+

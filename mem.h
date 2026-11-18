@@ -24,6 +24,19 @@ extern "C" {
 #define MEM_ALIGN              16
 #endif
 
+/* Policy Configuration Defaults */
+#ifndef MEM_SEARCH_POLICY
+#define MEM_SEARCH_POLICY      0 /* 0 = First-Fit, 1 = Best-Fit, 2 = Take-Head */
+#endif
+
+#ifndef MEM_INSERT_POLICY
+#define MEM_INSERT_POLICY      1 /* 0 = Address-Ordered, 1 = LIFO (Default) */
+#endif
+
+#ifndef MEM_SPLIT_THRESHOLD
+#define MEM_SPLIT_THRESHOLD    0 /* 0 = Header+16 B, 1 = Header+64 B */
+#endif
+
 /* Number of Segregated Free List Bins */
 #define NUM_BINS               8
 
@@ -47,6 +60,8 @@ void   Mem_GetFragmentationMetrics(double *utilization, double *internal_frag, d
 
 #ifdef MEM_TESTING
 int   Mem_Reset(void);
+void  Mem_SetAllowInterior(int enable);
+int   Mem_GetAllowInterior(void);
 #endif
 
 #ifdef MEM_STATS

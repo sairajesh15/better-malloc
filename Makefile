@@ -26,12 +26,25 @@ libmem_interior.so: mem_interior.o
 mem_interior.o: mem.c mem.h
 	$(CC) $(CFLAGS) -DMEM_TESTING -DMEM_ALLOW_INTERIOR=1 $(FPIC) -c mem.c -o mem_interior.o
 
-# 4. Standard Test Suite (MEM_ALLOW_INTERIOR=0, Strict O(1))
+# 4. Standard Test Suite (Default: LIFO Insertion, Strict O(1))
 test_suite: test_suite.o libmem_test.so
 	$(CC) -o test_suite test_suite.o -L. -lmem_test -Wl,-rpath,.
 
 test_suite.o: test_suite.c mem.h
 	$(CC) $(CFLAGS) -DMEM_TESTING -c test_suite.c -o test_suite.o
+
+# 4b. Address-Ordered Test Suite (MEM_INSERT_POLICY=0, Lowest-Address Hole Reuse)
+libmem_addr.so: mem_addr.o
+	$(CC) $(SHARED) $(FPIC) -o libmem_addr.so mem_addr.o
+
+mem_addr.o: mem.c mem.h
+	$(CC) $(CFLAGS) -DMEM_TESTING -DMEM_STATS -DMEM_INSERT_POLICY=0 $(FPIC) -c mem.c -o mem_addr.o
+
+test_suite_addr: test_suite_addr.o libmem_addr.so
+	$(CC) -o test_suite_addr test_suite_addr.o -L. -lmem_addr -Wl,-rpath,.
+
+test_suite_addr.o: test_suite.c mem.h
+	$(CC) $(CFLAGS) -DMEM_TESTING -DMEM_INSERT_POLICY=0 -c test_suite.c -o test_suite_addr.o
 
 # 5. Interior Pointer Test Suite (MEM_ALLOW_INTERIOR=1)
 test_suite_interior: test_suite_interior.o libmem_interior.so
@@ -91,24 +104,32 @@ sanitize: test_suite_sanitize
 	@echo "\n>>> RUNNING SANITIZED TEST SUITE (UBSan on allocator & harness, ASan on harness) <<<"
 	./test_suite_sanitize
 
-# 11. Diagnostic Run for Phase 3a
+# 11. Diagnostic Run for Phase 3a & 3b (Address-Ordered vs LIFO)
 diagnose_fragmentation: diagnose_fragmentation.o libmem_test.so
 	$(CC) -o diagnose_fragmentation diagnose_fragmentation.o -L. -lmem_test -Wl,-rpath,.
 
 diagnose_fragmentation.o: diagnose_fragmentation.c mem.h
 	$(CC) $(CFLAGS) -DMEM_TESTING -DMEM_STATS -c diagnose_fragmentation.c -o diagnose_fragmentation.o
 
-diagnose: diagnose_fragmentation
+diagnose_addr: diagnose_fragmentation.c libmem_addr.so
+	$(CC) $(CFLAGS) -DMEM_TESTING -DMEM_STATS -DMEM_INSERT_POLICY=0 diagnose_fragmentation.c -L. -lmem_addr -Wl,-rpath,. -o diagnose_addr
+
+diagnose: diagnose_addr diagnose_fragmentation
+	@echo ">>> RUNNING DIAGNOSTIC: Address-Ordered Insertion (MEM_INSERT_POLICY=0) <<<"
+	./diagnose_addr 50000
+	@echo "\n>>> RUNNING DIAGNOSTIC: LIFO Insertion (MEM_INSERT_POLICY=1, Default) <<<"
 	./diagnose_fragmentation 50000
 
 # 12. Benchmark Workloads Matrix (Phase 3b)
 matrix:
 	python3 run_benchmark_matrix.py
 
-test: test_suite test_suite_interior
-	@echo "\n>>> RUNNING TEST SUITE (MEM_ALLOW_INTERIOR=0, Strict O(1) Path) <<<"
+test: test_suite test_suite_addr test_suite_interior
+	@echo "\n>>> RUNNING TEST SUITE (Default: LIFO Insertion Path) <<<"
 	./test_suite
-	@echo "\n>>> RUNNING TEST SUITE (MEM_ALLOW_INTERIOR=1, Interior Pointer Fallback Path) <<<"
+	@echo "\n>>> RUNNING TEST SUITE (MEM_INSERT_POLICY=0: Address-Ordered Lowest-Address Reuse) <<<"
+	./test_suite_addr
+	@echo "\n>>> RUNNING TEST SUITE (MEM_ALLOW_INTERIOR=1: Interior Pointer Fallback Path) <<<"
 	./test_suite_interior
 
 bench: bench_compare
@@ -118,6 +139,6 @@ serve: all
 	python3 server.py
 
 clean:
-	rm -f *.o libmem.so libmem_test.so libmem_interior.so libmem_ubsan.so test_suite test_suite_interior test_suite_sanitize bench_compare real_runner stress_test stress_test_debug diagnose_fragmentation
+	rm -f *.o libmem.so libmem_test.so libmem_interior.so libmem_addr.so libmem_ubsan.so test_suite test_suite_addr test_suite_interior test_suite_sanitize bench_compare real_runner stress_test stress_test_debug diagnose_fragmentation diagnose_addr
 
 .PHONY: all clean test bench serve stress stress_debug sanitize diagnose matrix

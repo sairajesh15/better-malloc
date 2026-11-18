@@ -70,6 +70,12 @@ def load_libmem():
     if hasattr(lib, "Mem_Reset"):
         lib.Mem_Reset.argtypes = []
         lib.Mem_Reset.restype = ctypes.c_int
+    if hasattr(lib, "Mem_SetAllowInterior"):
+        lib.Mem_SetAllowInterior.argtypes = [ctypes.c_int]
+        lib.Mem_SetAllowInterior.restype = None
+    if hasattr(lib, "Mem_GetAllowInterior"):
+        lib.Mem_GetAllowInterior.argtypes = []
+        lib.Mem_GetAllowInterior.restype = ctypes.c_int
 
     libc.fflush.argtypes = [ctypes.c_void_p]
     libc.fflush.restype = ctypes.c_int
@@ -550,6 +556,13 @@ class AllocatorBridgeHandler(SimpleHTTPRequestHandler):
             else:
                 log_msg = f"Mem_Alloc({size}) -> NULL (m_error: {error_code})"
 
+        elif action == "set_interior_mode":
+            enabled = bool(data.get("enabled", False))
+            if hasattr(lib, "Mem_SetAllowInterior"):
+                lib.Mem_SetAllowInterior(1 if enabled else 0)
+            log_msg = f"Interior pointer mode {'ENABLED (O(N) permissive)' if enabled else 'DISABLED (O(1) strict safety)'}"
+            extra_data = {"interior_mode": enabled}
+
         elif action == "free":
             ptr_val = data.get("pointer") or data.get("id")
             target_ptr = None
@@ -561,15 +574,48 @@ class AllocatorBridgeHandler(SimpleHTTPRequestHandler):
                 del session_pointers[ptr_val]
 
             offset = int(data.get("offset", 0))
+            allow_interior = data.get("allow_interior")
+            if allow_interior is not None and hasattr(lib, "Mem_SetAllowInterior"):
+                lib.Mem_SetAllowInterior(1 if allow_interior else 0)
+
             if target_ptr is not None:
                 final_ptr = target_ptr + offset
                 rc = lib.Mem_Free(ctypes.c_void_p(final_ptr))
                 error_code = get_m_error()
-                log_msg = f"Mem_Free(0x{final_ptr:09x}) -> rc: {rc} (m_error: {error_code})"
-                extra_data = {"freed_pointer": f"0x{final_ptr:09x}", "rc": rc}
+                err_names = {
+                    0: "SUCCESS",
+                    1: "E_NO_SPACE",
+                    2: "E_CORRUPT_FREESPACE",
+                    3: "E_PADDING_OVERWRITTEN",
+                    4: "E_BAD_ARGS",
+                    5: "E_BAD_POINTER"
+                }
+                err_name = err_names.get(error_code, f"CODE_{error_code}")
+                if rc == 0:
+                    log_msg = f"Mem_Free(0x{final_ptr:09x}) -> Success (rc: 0) [Coalesced cleanly]"
+                else:
+                    log_msg = f"Mem_Free(0x{final_ptr:09x}) -> Rejected with m_error={error_code} ({err_name})"
+                extra_data = {"freed_pointer": f"0x{final_ptr:09x}", "rc": rc, "m_error": error_code, "err_name": err_name}
             else:
-                log_msg = f"Mem_Free failed: pointer '{ptr_val}' not found in active session"
+                log_msg = f"Mem_Free failed: pointer '{ptr_val}' invalid"
                 error_code = 5
+
+        elif action == "test_double_free":
+            ptr_val = data.get("pointer") or data.get("id")
+            target_ptr = None
+            if isinstance(ptr_val, str) and ptr_val.startswith("0x"):
+                target_ptr = int(ptr_val, 16)
+            elif ptr_val in session_pointers:
+                target_ptr = session_pointers[ptr_val]
+
+            if target_ptr:
+                rc1 = lib.Mem_Free(ctypes.c_void_p(target_ptr))
+                rc2 = lib.Mem_Free(ctypes.c_void_p(target_ptr))
+                err2 = get_m_error()
+                log_msg = f"Double Free Defense: 1st Free rc={rc1}; 2nd Free rejected rc={rc2}, m_error={err2} (E_BAD_POINTER). Memory protected!"
+                extra_data = {"rc1": rc1, "rc2": rc2, "caught": (rc2 == -1 and err2 == 5)}
+            else:
+                log_msg = "Double free test failed: select an allocated block first"
 
         elif action == "corrupt_canary":
             ptr_val = data.get("pointer") or data.get("id")

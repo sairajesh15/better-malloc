@@ -1,0 +1,189 @@
+cc -Wall -Wextra -O2 -DMEM_TESTING -c test_suite.c -o test_suite.o
+cc -Wall -Wextra -O2 -DMEM_TESTING -DMEM_STATS -fPIC -c mem.c -o mem_test.o
+cc -shared -fPIC -o libmem_test.so mem_test.o
+cc -o test_suite test_suite.o -L. -lmem_test -Wl,-rpath,.
+cc -Wall -Wextra -O2 -DMEM_TESTING -DMEM_INSERT_POLICY=0 -c test_suite.c -o test_suite_addr.o
+cc -Wall -Wextra -O2 -DMEM_TESTING -DMEM_INSERT_POLICY=0 -fPIC -c mem.c -o mem_addr.o
+cc -shared -fPIC -o libmem_addr.so mem_addr.o
+cc -o test_suite_addr test_suite_addr.o -L. -lmem_addr -Wl,-rpath,.
+cc -Wall -Wextra -O2 -DMEM_TESTING -DMEM_ALLOW_INTERIOR=1 -c test_suite.c -o test_suite_interior.o
+cc -Wall -Wextra -O2 -DMEM_TESTING -DMEM_ALLOW_INTERIOR=1 -fPIC -c mem.c -o mem_interior.o
+cc -shared -fPIC -o libmem_interior.so mem_interior.o
+cc -o test_suite_interior test_suite_interior.o -L. -lmem_interior -Wl,-rpath,.
+
+>>> RUNNING TEST SUITE (Default: LIFO Insertion Path) <<<
+./test_suite
+================================================================================
+   PROJECT 23: A 'BETTER' MALLOC - COMPREHENSIVE TEST SUITE (SEGREGATED BINS)   
+================================================================================
+
+[ RUN  ] test_uninitialized_and_bad_args
+--- Mem_Dump: Allocator uninitialized ---
+[ PASS ] test_uninitialized_and_bad_args
+
+[ RUN  ] test_page_rounding_and_double_init
+[ PASS ] test_page_rounding_and_double_init
+
+[ RUN  ] test_pointer_alignment_and_integrity
+[ PASS ] test_pointer_alignment_and_integrity
+
+[ RUN  ] test_canary_buffer_overflow_detection
+[ PASS ] test_canary_buffer_overflow_detection
+
+[ RUN  ] test_block_splitting_and_bins
+[ PASS ] test_block_splitting_and_bins
+
+[ RUN  ] test_coalescing_cases
+[ PASS ] test_coalescing_cases
+
+[ RUN  ] test_interior_pointers_and_bad_pointers
+[ PASS ] test_interior_pointers_and_bad_pointers
+
+[ RUN  ] test_fragmentation_and_first_fit
+[ PASS ] test_fragmentation_and_first_fit
+
+[ RUN  ] test_mem_check_integrity
+[ PASS ] test_mem_check_integrity
+
+[ RUN  ] test_randomized_stress
+[ PASS ] test_randomized_stress
+
+[ RUN  ] test_negative_cases
+[NEGATIVE TEST] 1-byte overflow at size 1                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 7                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 8                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 13                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 16                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 24                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 100                 : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow in unsplit slack (size 200/256): CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] Double free                                    : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Pointer into header (ptr - 8)                  : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Pointer outside arena                          : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Allocation size INT_MAX                        : CAUGHT (p = NULL, m_error = 1 [E_NO_SPACE])
+[NEGATIVE TEST] Allocation size 0                              : CAUGHT (p = NULL, m_error = 4 [E_BAD_ARGS])
+[NEGATIVE TEST] Allocation size -1                             : CAUGHT (p = NULL, m_error = 4 [E_BAD_ARGS])
+[ PASS ] test_negative_cases
+
+--------------------------------------------------------------------------------
+TEST RESULTS: 11 / 11 Tests Passed (100.0% Success Rate)
+--------------------------------------------------------------------------------
+
+
+>>> RUNNING TEST SUITE (MEM_INSERT_POLICY=0: Address-Ordered Lowest-Address Reuse) <<<
+./test_suite_addr
+================================================================================
+   PROJECT 23: A 'BETTER' MALLOC - COMPREHENSIVE TEST SUITE (SEGREGATED BINS)   
+================================================================================
+
+[ RUN  ] test_uninitialized_and_bad_args
+--- Mem_Dump: Allocator uninitialized ---
+[ PASS ] test_uninitialized_and_bad_args
+
+[ RUN  ] test_page_rounding_and_double_init
+[ PASS ] test_page_rounding_and_double_init
+
+[ RUN  ] test_pointer_alignment_and_integrity
+[ PASS ] test_pointer_alignment_and_integrity
+
+[ RUN  ] test_canary_buffer_overflow_detection
+[ PASS ] test_canary_buffer_overflow_detection
+
+[ RUN  ] test_block_splitting_and_bins
+[ PASS ] test_block_splitting_and_bins
+
+[ RUN  ] test_coalescing_cases
+[ PASS ] test_coalescing_cases
+
+[ RUN  ] test_interior_pointers_and_bad_pointers
+[ PASS ] test_interior_pointers_and_bad_pointers
+
+[ RUN  ] test_fragmentation_and_first_fit
+[ PASS ] test_fragmentation_and_first_fit
+
+[ RUN  ] test_mem_check_integrity
+[ PASS ] test_mem_check_integrity
+
+[ RUN  ] test_randomized_stress
+[ PASS ] test_randomized_stress
+
+[ RUN  ] test_negative_cases
+[NEGATIVE TEST] 1-byte overflow at size 1                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 7                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 8                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 13                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 16                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 24                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 100                 : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow in unsplit slack (size 200/256): CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] Double free                                    : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Pointer into header (ptr - 8)                  : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Pointer outside arena                          : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Allocation size INT_MAX                        : CAUGHT (p = NULL, m_error = 1 [E_NO_SPACE])
+[NEGATIVE TEST] Allocation size 0                              : CAUGHT (p = NULL, m_error = 4 [E_BAD_ARGS])
+[NEGATIVE TEST] Allocation size -1                             : CAUGHT (p = NULL, m_error = 4 [E_BAD_ARGS])
+[ PASS ] test_negative_cases
+
+--------------------------------------------------------------------------------
+TEST RESULTS: 11 / 11 Tests Passed (100.0% Success Rate)
+--------------------------------------------------------------------------------
+
+
+>>> RUNNING TEST SUITE (MEM_ALLOW_INTERIOR=1: Interior Pointer Fallback Path) <<<
+./test_suite_interior
+================================================================================
+   PROJECT 23: A 'BETTER' MALLOC - COMPREHENSIVE TEST SUITE (SEGREGATED BINS)   
+================================================================================
+
+[ RUN  ] test_uninitialized_and_bad_args
+--- Mem_Dump: Allocator uninitialized ---
+[ PASS ] test_uninitialized_and_bad_args
+
+[ RUN  ] test_page_rounding_and_double_init
+[ PASS ] test_page_rounding_and_double_init
+
+[ RUN  ] test_pointer_alignment_and_integrity
+[ PASS ] test_pointer_alignment_and_integrity
+
+[ RUN  ] test_canary_buffer_overflow_detection
+[ PASS ] test_canary_buffer_overflow_detection
+
+[ RUN  ] test_block_splitting_and_bins
+[ PASS ] test_block_splitting_and_bins
+
+[ RUN  ] test_coalescing_cases
+[ PASS ] test_coalescing_cases
+
+[ RUN  ] test_interior_pointers_and_bad_pointers
+[ PASS ] test_interior_pointers_and_bad_pointers
+
+[ RUN  ] test_fragmentation_and_first_fit
+[ PASS ] test_fragmentation_and_first_fit
+
+[ RUN  ] test_mem_check_integrity
+[ PASS ] test_mem_check_integrity
+
+[ RUN  ] test_randomized_stress
+[ PASS ] test_randomized_stress
+
+[ RUN  ] test_negative_cases
+[NEGATIVE TEST] 1-byte overflow at size 1                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 7                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 8                   : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 13                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 16                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 24                  : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow at size 100                 : CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] 1-byte overflow in unsplit slack (size 200/256): CAUGHT (rc = -1, m_error = 3 [E_PADDING_OVERWRITTEN])
+[NEGATIVE TEST] Double free                                    : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Pointer into header (ptr - 8)                  : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Pointer outside arena                          : CAUGHT (rc = -1, m_error = 5 [E_BAD_POINTER])
+[NEGATIVE TEST] Allocation size INT_MAX                        : CAUGHT (p = NULL, m_error = 1 [E_NO_SPACE])
+[NEGATIVE TEST] Allocation size 0                              : CAUGHT (p = NULL, m_error = 4 [E_BAD_ARGS])
+[NEGATIVE TEST] Allocation size -1                             : CAUGHT (p = NULL, m_error = 4 [E_BAD_ARGS])
+[ PASS ] test_negative_cases
+
+--------------------------------------------------------------------------------
+TEST RESULTS: 11 / 11 Tests Passed (100.0% Success Rate)
+--------------------------------------------------------------------------------
+
