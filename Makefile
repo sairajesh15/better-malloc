@@ -3,7 +3,7 @@ CFLAGS ?= -Wall -Wextra -O2
 FPIC ?= -fPIC
 SHARED ?= -shared
 
-all: libmem.so libmem_test.so test_suite test_suite_interior bench_compare real_runner
+all: libmem.so libmem_test.so test_suite test_suite_interior bench_compare real_runner stress_test
 
 # 1. Shipped Production Library (Mem_Reset excluded)
 libmem.so: mem.o
@@ -54,6 +54,43 @@ real_runner: real_runner.o libmem_test.so
 real_runner.o: real_runner.c mem.h
 	$(CC) $(CFLAGS) -DMEM_TESTING -c real_runner.c -o real_runner.o
 
+# 8. Randomized Stress Test
+stress_test: stress_test.o libmem_test.so
+	$(CC) -o stress_test stress_test.o -L. -lmem_test -Wl,-rpath,.
+
+stress_test.o: stress_test.c mem.h
+	$(CC) $(CFLAGS) -DMEM_TESTING -c stress_test.c -o stress_test.o
+
+stress: stress_test
+	./stress_test 1337
+
+# 9. Debug Stress Test with Mem_Check after every op
+stress_test_debug: stress_test_debug.o libmem_test.so
+	$(CC) -o stress_test_debug stress_test_debug.o -L. -lmem_test -Wl,-rpath,.
+
+stress_test_debug.o: stress_test.c mem.h
+	$(CC) $(CFLAGS) -DMEM_TESTING -DSTRESS_DEBUG -c stress_test.c -o stress_test_debug.o
+
+stress_debug: stress_test_debug
+	./stress_test_debug 1337 5000
+
+# 10. Sanitized Builds: UBSan on allocator and harness, ASan on harness only
+mem_ubsan.o: mem.c mem.h
+	$(CC) $(CFLAGS) -DMEM_TESTING -fsanitize=undefined $(FPIC) -c mem.c -o mem_ubsan.o
+
+libmem_ubsan.so: mem_ubsan.o
+	$(CC) $(SHARED) $(FPIC) -fsanitize=undefined -o libmem_ubsan.so mem_ubsan.o
+
+test_suite_sanitize.o: test_suite.c mem.h
+	$(CC) $(CFLAGS) -DMEM_TESTING -fsanitize=undefined,address -c test_suite.c -o test_suite_sanitize.o
+
+test_suite_sanitize: test_suite_sanitize.o libmem_ubsan.so
+	$(CC) -fsanitize=undefined,address -o test_suite_sanitize test_suite_sanitize.o -L. -lmem_ubsan -Wl,-rpath,.
+
+sanitize: test_suite_sanitize
+	@echo "\n>>> RUNNING SANITIZED TEST SUITE (UBSan on allocator & harness, ASan on harness) <<<"
+	./test_suite_sanitize
+
 test: test_suite test_suite_interior
 	@echo "\n>>> RUNNING TEST SUITE (MEM_ALLOW_INTERIOR=0, Strict O(1) Path) <<<"
 	./test_suite
@@ -67,6 +104,6 @@ serve: all
 	python3 server.py
 
 clean:
-	rm -f *.o libmem.so libmem_test.so libmem_interior.so test_suite test_suite_interior bench_compare real_runner
+	rm -f *.o libmem.so libmem_test.so libmem_interior.so libmem_ubsan.so test_suite test_suite_interior test_suite_sanitize bench_compare real_runner stress_test stress_test_debug
 
-.PHONY: all clean test bench serve
+.PHONY: all clean test bench serve stress stress_debug sanitize

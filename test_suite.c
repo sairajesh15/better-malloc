@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 #include <time.h>
+#include <limits.h>
 
 #define TEST_ASSERT(cond, msg) do { \
     if (!(cond)) { \
@@ -522,6 +523,107 @@ static void test_randomized_stress(void) {
 }
 
 /* ========================================================================= */
+/* Test 11: Negative Test Suite (One Line Per Case)                          */
+/* ========================================================================= */
+static void run_negative_case_overflow(int size) {
+    void *p = Mem_Alloc(size);
+    TEST_ASSERT(p != NULL, "Alloc must succeed");
+    /* The canary is placed at ((char *)p + size). Corrupting the first byte of canary */
+    char *canary_byte = (char *)p + size;
+    *canary_byte ^= 0x55;
+    m_error = 0;
+    int rc = Mem_Free(p);
+    TEST_ASSERT(rc == -1, "Overwritten canary free must return -1");
+    TEST_ASSERT(m_error == E_PADDING_OVERWRITTEN, "m_error must be E_PADDING_OVERWRITTEN");
+    printf("[NEGATIVE TEST] 1-byte overflow at size %-3d                 : CAUGHT (rc = %d, m_error = %d [E_PADDING_OVERWRITTEN])\n",
+           size, rc, m_error);
+    *canary_byte ^= 0x55;
+    TEST_ASSERT(Mem_Free(p) == 0, "Clean free after restoring canary");
+}
+
+static void test_negative_cases(void) {
+    int res = Mem_Init(65536);
+    TEST_ASSERT(res == 0, "Mem_Init(65536) must succeed");
+
+    /* 1. 1-byte overflow at sizes 1, 7, 8, 13, 16, 24, 100 */
+    static const int overflow_sizes[] = {1, 7, 8, 13, 16, 24, 100};
+    for (size_t i = 0; i < sizeof(overflow_sizes) / sizeof(overflow_sizes[0]); i++) {
+        run_negative_case_overflow(overflow_sizes[i]);
+    }
+
+    /* 2. Size that leaves unsplit slack (isolated 256-byte block) */
+    void *guard1 = Mem_Alloc(32);
+    void *target = Mem_Alloc(240); /* 240 + 8 = 248, aligned to 256 */
+    void *guard2 = Mem_Alloc(32);
+    TEST_ASSERT(guard1 && target && guard2, "Guard allocs must succeed");
+    TEST_ASSERT(Mem_Free(target) == 0, "Free isolated target block");
+
+    /* 200 + 8 = 208; in 256-byte block, remaining is 48 (< 64), so block cannot split */
+    void *slack_p = Mem_Alloc(200);
+    TEST_ASSERT(slack_p == target, "Alloc 200 must reuse isolated target block");
+    /* Corrupt byte inside unsplit slack padding (beyond canary) */
+    char *slack_byte = (char *)slack_p + 200 + 8 + 10;
+    *slack_byte ^= 0x55;
+    m_error = 0;
+    int rc = Mem_Free(slack_p);
+    TEST_ASSERT(rc == -1 && m_error == E_PADDING_OVERWRITTEN, "Corrupted slack padding must be caught");
+    printf("[NEGATIVE TEST] 1-byte overflow in unsplit slack (size 200/256): CAUGHT (rc = %d, m_error = %d [E_PADDING_OVERWRITTEN])\n",
+           rc, m_error);
+    *slack_byte ^= 0x55;
+    TEST_ASSERT(Mem_Free(slack_p) == 0, "Clean free after restoring slack");
+    TEST_ASSERT(Mem_Free(guard1) == 0, "Free guard1");
+    TEST_ASSERT(Mem_Free(guard2) == 0, "Free guard2");
+
+    /* 3. Double free */
+    void *df_p = Mem_Alloc(64);
+    TEST_ASSERT(df_p != NULL, "Alloc 64 for double free");
+    TEST_ASSERT(Mem_Free(df_p) == 0, "Initial free must succeed");
+    m_error = 0;
+    rc = Mem_Free(df_p);
+    TEST_ASSERT(rc == -1 && m_error == E_BAD_POINTER, "Double free must fail with E_BAD_POINTER");
+    printf("[NEGATIVE TEST] Double free                                    : CAUGHT (rc = %d, m_error = %d [E_BAD_POINTER])\n",
+           rc, m_error);
+
+    /* 4. Pointer into header (ptr - 8) */
+    void *hdr_p = Mem_Alloc(64);
+    TEST_ASSERT(hdr_p != NULL, "Alloc 64 for header check");
+    m_error = 0;
+    rc = Mem_Free((char *)hdr_p - 8);
+    TEST_ASSERT(rc == -1 && m_error == E_BAD_POINTER, "Pointer into header must fail with E_BAD_POINTER");
+    printf("[NEGATIVE TEST] Pointer into header (ptr - 8)                  : CAUGHT (rc = %d, m_error = %d [E_BAD_POINTER])\n",
+           rc, m_error);
+    TEST_ASSERT(Mem_Free(hdr_p) == 0, "Clean free of hdr_p");
+
+    /* 5. Pointer outside arena */
+    m_error = 0;
+    rc = Mem_Free((void *)0x12345678);
+    TEST_ASSERT(rc == -1 && m_error == E_BAD_POINTER, "Pointer outside arena must fail with E_BAD_POINTER");
+    printf("[NEGATIVE TEST] Pointer outside arena                          : CAUGHT (rc = %d, m_error = %d [E_BAD_POINTER])\n",
+           rc, m_error);
+
+    /* 6. Sizes INT_MAX, 0, -1 */
+    m_error = 0;
+    void *max_p = Mem_Alloc(INT_MAX);
+    TEST_ASSERT(max_p == NULL && (m_error == E_NO_SPACE || m_error == E_BAD_ARGS), "Alloc INT_MAX must fail");
+    printf("[NEGATIVE TEST] Allocation size INT_MAX                        : CAUGHT (p = NULL, m_error = %d [%s])\n",
+           m_error, m_error == E_NO_SPACE ? "E_NO_SPACE" : "E_BAD_ARGS");
+
+    m_error = 0;
+    void *zero_p = Mem_Alloc(0);
+    TEST_ASSERT(zero_p == NULL && m_error == E_BAD_ARGS, "Alloc 0 must fail with E_BAD_ARGS");
+    printf("[NEGATIVE TEST] Allocation size 0                              : CAUGHT (p = NULL, m_error = %d [E_BAD_ARGS])\n",
+           m_error);
+
+    m_error = 0;
+    void *neg_p = Mem_Alloc(-1);
+    TEST_ASSERT(neg_p == NULL && m_error == E_BAD_ARGS, "Alloc -1 must fail with E_BAD_ARGS");
+    printf("[NEGATIVE TEST] Allocation size -1                             : CAUGHT (p = NULL, m_error = %d [E_BAD_ARGS])\n",
+           m_error);
+
+    TEST_ASSERT(Mem_Check() == 0, "Mem_Check at end of negative tests must succeed");
+}
+
+/* ========================================================================= */
 /* Test Runner                                                               */
 /* ========================================================================= */
 static int run_isolated_test(const char *name, void (*test_func)(void)) {
@@ -579,6 +681,7 @@ int main(void) {
     EXECUTE_TEST(test_fragmentation_and_first_fit);
     EXECUTE_TEST(test_mem_check_integrity);
     EXECUTE_TEST(test_randomized_stress);
+    EXECUTE_TEST(test_negative_cases);
 
     printf("--------------------------------------------------------------------------------\n");
     printf("TEST RESULTS: %d / %d Tests Passed (%.1f%% Success Rate)\n",

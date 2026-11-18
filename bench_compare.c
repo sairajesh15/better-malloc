@@ -422,10 +422,15 @@ int main(int argc, char *argv[]) {
     Mem_Init(ARENA_SIZE);
 
     void *buf = Mem_Alloc(256);
-    int interior_ok = (Mem_Free((char *)buf + 24) == 0);
-    if (!interior_ok) {
-        Mem_Free(buf);
-    }
+    int interior_pass = 0;
+#if MEM_ALLOW_INTERIOR
+    interior_pass = (Mem_Free((char *)buf + 24) == 0);
+#else
+    m_error = 0;
+    int interior_rc = Mem_Free((char *)buf + 24);
+    interior_pass = (interior_rc == -1 && m_error == E_BAD_POINTER);
+    Mem_Free(buf);
+#endif
 
     void *canary_buf = Mem_Alloc(128);
     /* Overwrite canary at end of block (+128 bytes after payload) */
@@ -461,9 +466,13 @@ int main(int argc, char *argv[]) {
     }
 
     printf("\nSafety & Architectural Invariants:\n");
-    printf("  - OS mmap Syscalls        : %d (libmem.so) vs 24+ (system malloc)\n", mmap_count);
+    printf("  - OS mmap Syscalls        : %d (libmem.so) vs dynamic on-demand (system malloc)\n", mmap_count);
     printf("  - Buffer Overflow Canary  : %s (E_PADDING_OVERWRITTEN caught)\n", overflow_caught ? "VERIFIED" : "FAILED");
-    printf("  - Interior Pointer Free   : %s (Resolved to payload range)\n", interior_ok ? "SUPPORTED" : "FAILED");
+#if MEM_ALLOW_INTERIOR
+    printf("  - Interior Pointer Free   : %s (MEM_ALLOW_INTERIOR=1: Resolved to payload range)\n", interior_pass ? "PASS" : "FAIL");
+#else
+    printf("  - Interior Pointer Free   : %s (MEM_ALLOW_INTERIOR=0: Strictly rejected with E_BAD_POINTER)\n", interior_pass ? "PASS" : "FAIL");
+#endif
 
     /* Export to real_comparison.json */
     FILE *fp = fopen("real_comparison.json", "w");
@@ -475,7 +484,7 @@ int main(int argc, char *argv[]) {
         fprintf(fp, "  \"mmap_syscall_count\": %d,\n", mmap_count);
         fprintf(fp, "  \"safety\": {\n");
         fprintf(fp, "    \"canary_buffer_overflow_detected\": %s,\n", overflow_caught ? "true" : "false");
-        fprintf(fp, "    \"interior_pointer_free_supported\": %s\n", interior_ok ? "true" : "false");
+        fprintf(fp, "    \"interior_pointer_safety_verified\": %s\n", interior_pass ? "true" : "false");
         fprintf(fp, "  },\n");
         fprintf(fp, "  \"workloads\": [\n");
 
