@@ -354,6 +354,174 @@ static void test_fragmentation_and_first_fit(void) {
 }
 
 /* ========================================================================= */
+/* Test 9: Mem_Check Exhaustive Heap Consistency and Fault Invariant Checker */
+/* ========================================================================= */
+static void test_mem_check_integrity(void) {
+    /* 1. Mem_Check before Mem_Init must fail */
+    TEST_ASSERT(Mem_Check() == -1, "Mem_Check before Mem_Init must return -1");
+
+    int res = Mem_Init(65536);
+    TEST_ASSERT(res == 0, "Mem_Init(65536) must succeed");
+
+    /* 2. Pristine arena must pass Mem_Check */
+    TEST_ASSERT(Mem_Check() == 0, "Initial clean arena must pass Mem_Check");
+
+    /* 3. Mixed allocations */
+    void *p1 = Mem_Alloc(32);
+    void *p2 = Mem_Alloc(64);
+    void *p3 = Mem_Alloc(128);
+    void *p4 = Mem_Alloc(256);
+    TEST_ASSERT(p1 && p2 && p3 && p4, "All 4 allocations must succeed");
+    TEST_ASSERT(Mem_Check() == 0, "Allocated state must pass Mem_Check");
+
+    /* 4. Partial deallocation exercising bin insertion */
+    TEST_ASSERT(Mem_Free(p2) == 0, "Mem_Free(p2)");
+    TEST_ASSERT(Mem_Check() == 0, "Partial free state must pass Mem_Check");
+
+    /* 5. Intentionally corrupt block magic on p3's header (offset -48 + 12) */
+    uint32_t *p3_magic = (uint32_t *)((char *)p3 - 48 + 12);
+    uint32_t orig_magic = *p3_magic;
+    *p3_magic = 0xDEADBEEF;
+    TEST_ASSERT(Mem_Check() == -1, "Mem_Check must detect corrupted magic tag");
+    *p3_magic = orig_magic;
+    TEST_ASSERT(Mem_Check() == 0, "Mem_Check must pass after restoring magic tag");
+
+    /* 6. Intentionally corrupt trailing canary on p4 */
+    uint64_t *p4_canary = (uint64_t *)((char *)p4 + 256);
+    uint64_t orig_canary = *p4_canary;
+    *p4_canary = 0xCAFEBABE00000000ULL;
+    TEST_ASSERT(Mem_Check() == -1, "Mem_Check must detect corrupted canary");
+    *p4_canary = orig_canary;
+    TEST_ASSERT(Mem_Check() == 0, "Mem_Check must pass after restoring canary");
+
+    /* 7. Clean up all allocations */
+    TEST_ASSERT(Mem_Free(p1) == 0, "Free p1");
+    TEST_ASSERT(Mem_Free(p3) == 0, "Free p3");
+    TEST_ASSERT(Mem_Free(p4) == 0, "Free p4");
+
+    /* 8. Coalesced arena must pass Mem_Check */
+    TEST_ASSERT(Mem_Check() == 0, "Fully coalesced arena must pass Mem_Check");
+}
+
+/* ========================================================================= */
+/* Test 10: Randomized Churn Stress Test with Continuous Mem_Check Validation*/
+/* ========================================================================= */
+#define STRESS_ARENA_SIZE   262144  /* 256 KB */
+#define MAX_ACTIVE_ALLOCS   128
+#define STRESS_ITERATIONS   5000
+
+typedef struct {
+    void *ptr;
+    size_t size;
+    uint8_t seed;
+} active_record_t;
+
+static void test_randomized_stress(void) {
+    int res = Mem_Init(STRESS_ARENA_SIZE);
+    TEST_ASSERT(res == 0, "Mem_Init(STRESS_ARENA_SIZE) must succeed");
+    TEST_ASSERT(Mem_Check() == 0, "Initial Mem_Check must pass");
+
+    active_record_t active[MAX_ACTIVE_ALLOCS];
+    for (int i = 0; i < MAX_ACTIVE_ALLOCS; i++) {
+        active[i].ptr = NULL;
+        active[i].size = 0;
+        active[i].seed = 0;
+    }
+
+    size_t active_count = 0;
+    uint32_t lcg = 0x12345678;
+
+    #define NEXT_RAND() (lcg = lcg * 1664525U + 1013904223U)
+
+    for (int iter = 0; iter < STRESS_ITERATIONS; iter++) {
+        int should_alloc = (active_count == 0) || ((NEXT_RAND() % 100) < 55 && active_count < MAX_ACTIVE_ALLOCS);
+
+        if (should_alloc) {
+            /* Find an empty slot */
+            int slot = -1;
+            for (int i = 0; i < MAX_ACTIVE_ALLOCS; i++) {
+                if (active[i].ptr == NULL) {
+                    slot = i;
+                    break;
+                }
+            }
+            TEST_ASSERT(slot >= 0, "Empty slot must exist");
+
+            /* Random size from 1 to 1024 bytes */
+            size_t req_sz = (NEXT_RAND() % 1024) + 1;
+            void *p = Mem_Alloc((int)req_sz);
+            if (p != NULL) {
+                TEST_ASSERT(((uintptr_t)p & 15) == 0, "Allocation must satisfy 16-byte alignment");
+                uint8_t seed = (uint8_t)(NEXT_RAND() & 0xFF);
+                /* Write deterministic verification pattern */
+                uint8_t *bptr = (uint8_t *)p;
+                for (size_t b = 0; b < req_sz; b++) {
+                    bptr[b] = (uint8_t)((seed + b) & 0xFF);
+                }
+                active[slot].ptr = p;
+                active[slot].size = req_sz;
+                active[slot].seed = seed;
+                active_count++;
+            }
+        } else {
+            /* Pick a random active allocation to verify and free */
+            int slot = -1;
+            int start_idx = (int)(NEXT_RAND() % MAX_ACTIVE_ALLOCS);
+            for (int k = 0; k < MAX_ACTIVE_ALLOCS; k++) {
+                int idx = (start_idx + k) % MAX_ACTIVE_ALLOCS;
+                if (active[idx].ptr != NULL) {
+                    slot = idx;
+                    break;
+                }
+            }
+            TEST_ASSERT(slot >= 0, "Active slot must exist");
+
+            /* Verify byte integrity before freeing */
+            uint8_t *bptr = (uint8_t *)active[slot].ptr;
+            for (size_t b = 0; b < active[slot].size; b++) {
+                uint8_t expected = (uint8_t)((active[slot].seed + b) & 0xFF);
+                TEST_ASSERT(bptr[b] == expected, "Payload corrupted during churn");
+            }
+
+            res = Mem_Free(active[slot].ptr);
+            TEST_ASSERT(res == 0, "Mem_Free must succeed during stress churn");
+
+            active[slot].ptr = NULL;
+            active[slot].size = 0;
+            active[slot].seed = 0;
+            active_count--;
+        }
+
+        /* Periodic continuous heap invariant validation */
+        if (iter % 500 == 0) {
+            TEST_ASSERT(Mem_Check() == 0, "Continuous Mem_Check failed during stress test");
+        }
+    }
+
+    /* Free all remaining active allocations and verify contents */
+    for (int i = 0; i < MAX_ACTIVE_ALLOCS; i++) {
+        if (active[i].ptr != NULL) {
+            uint8_t *bptr = (uint8_t *)active[i].ptr;
+            for (size_t b = 0; b < active[i].size; b++) {
+                uint8_t expected = (uint8_t)((active[i].seed + b) & 0xFF);
+                TEST_ASSERT(bptr[b] == expected, "Final active payload corrupted");
+            }
+            res = Mem_Free(active[i].ptr);
+            TEST_ASSERT(res == 0, "Final cleanup free must succeed");
+            active[i].ptr = NULL;
+        }
+    }
+
+    /* Heap must pass Mem_Check and be 100% coalesced back into a single block */
+    TEST_ASSERT(Mem_Check() == 0, "Mem_Check after draining all active blocks must succeed");
+
+    void *all_restored = Mem_Alloc((int)(STRESS_ARENA_SIZE - 48 - 8));
+    TEST_ASSERT(all_restored != NULL, "Arena must completely coalesce back to 1 large block");
+    TEST_ASSERT(Mem_Free(all_restored) == 0, "Clean up full arena block");
+    TEST_ASSERT(Mem_Check() == 0, "Final Mem_Check must succeed");
+}
+
+/* ========================================================================= */
 /* Test Runner                                                               */
 /* ========================================================================= */
 static int run_isolated_test(const char *name, void (*test_func)(void)) {
@@ -409,6 +577,8 @@ int main(void) {
     EXECUTE_TEST(test_coalescing_cases);
     EXECUTE_TEST(test_interior_pointers_and_bad_pointers);
     EXECUTE_TEST(test_fragmentation_and_first_fit);
+    EXECUTE_TEST(test_mem_check_integrity);
+    EXECUTE_TEST(test_randomized_stress);
 
     printf("--------------------------------------------------------------------------------\n");
     printf("TEST RESULTS: %d / %d Tests Passed (%.1f%% Success Rate)\n",

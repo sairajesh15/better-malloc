@@ -36,6 +36,7 @@ int   Mem_Init(int sizeOfRegion);
 void *Mem_Alloc(int size);
 int   Mem_Free(void *ptr);
 void  Mem_Dump(void);
+int   Mem_Check(void);
 
 /* Diagnostic Queries & Introspection */
 int   Mem_GetMmapCount(void);

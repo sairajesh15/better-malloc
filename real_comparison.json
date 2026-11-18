@@ -1,40 +1,16 @@
 {
-  "timestamp": 1795006280,
+  "timestamp": 1795006407,
   "architecture": "Apple Silicon ARM64 (macOS)",
   "compiler": "Apple Clang -O2",
   "mmap_syscall_count": 1,
   "safety": {
     "canary_buffer_overflow_detected": true,
-    "interior_pointer_free_supported": false
+    "interior_pointer_free_supported": true
   },
-  "workloads": [
-    {
-      "key": "http_json",
-      "name": "HTTP / JSON Parser Trace",
-      "operations": 50000,
-      "libmem": { "throughput_mops": 6.79, "p50_ns": 84, "p99_ns": 292, "max_ns": 92167, "time_sec": 0.0074 },
-      "system_malloc": { "throughput_mops": 12.98, "p50_ns": 42, "p99_ns": 125, "max_ns": 9791, "time_sec": 0.0039 }
-    },
-    {
-      "key": "frame_queue",
-      "name": "Frame Buffer FIFO Queue Trace",
-      "operations": 50000,
-      "libmem": { "throughput_mops": 3.68, "p50_ns": 83, "p99_ns": 2208, "max_ns": 70333, "time_sec": 0.0136 },
-      "system_malloc": { "throughput_mops": 1.51, "p50_ns": 42, "p99_ns": 2041, "max_ns": 4609333, "time_sec": 0.0331 }
-    },
-    {
-      "key": "fragmentation",
-      "name": "Fragmentation Stress & Coalescing",
-      "operations": 50000,
-      "libmem": { "throughput_mops": 0.23, "p50_ns": 41, "p99_ns": 43250, "max_ns": 77500, "time_sec": 0.2184 },
-      "system_malloc": { "throughput_mops": 30.90, "p50_ns": 0, "p99_ns": 125, "max_ns": 29417, "time_sec": 0.0016 }
-    },
-    {
-      "key": "random_mixed",
-      "name": "Random Mixed High-Churn Trace",
-      "operations": 50000,
-      "libmem": { "throughput_mops": 7.72, "p50_ns": 83, "p99_ns": 375, "max_ns": 20125, "time_sec": 0.0065 },
-      "system_malloc": { "throughput_mops": 19.63, "p50_ns": 42, "p99_ns": 167, "max_ns": 19083, "time_sec": 0.0025 }
-    }
-  ]
+  "workload": {
+    "name": "Interactive Custom Live Benchmark",
+    "operations": 20000,
+    "libmem": { "throughput_mops": 7.04, "p50_ns": 83, "p90_ns": 167, "p99_ns": 333, "max_ns": 3500, "time_sec": 0.002839, "minor_faults": 70, "vol_csw": 0, "invol_csw": 0 },
+    "system_malloc": { "throughput_mops": 13.23, "p50_ns": 42, "p90_ns": 84, "p99_ns": 167, "max_ns": 3792, "time_sec": 0.001512, "minor_faults": 72, "vol_csw": 0, "invol_csw": 0 }
+  }
 }

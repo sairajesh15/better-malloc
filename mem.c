@@ -612,6 +612,192 @@ size_t Mem_GetArenaSize(void) {
     return arena_size;
 }
 
+/*
+ * Mem_Check: Exhaustive heap sanity checker.
+ * Validates:
+ * 1. Allocator initialization invariants (arena bounds, page multiples).
+ * 2. Physical block chain consistency:
+ *    - Magic tag 0x4D454D59 on all blocks.
+ *    - Strict alignment of all sizes (size % MEM_ALIGN == 0).
+ *    - Contiguous physical neighbor symmetry:
+ *      (curr->next_phys->prev_phys == curr, curr->prev_phys->next_phys == curr).
+ *    - No adjacent free blocks (coalescing invariant).
+ *    - Physical block size accounting: sum(sizeof(block_header_t) + size) == arena_size.
+ * 3. Allocated block integrity:
+ *    - Canary constant (0xDEADBEEFCAFEBABE) immediately following payload + req_size.
+ *    - Padding bytes (0xA5) covering slack up to block->size.
+ * 4. Free list & Segregated bin invariants:
+ *    - Every free block is in the correct bin: Mem_GetBinIndex(size).
+ *    - Doubly-linked free list symmetry (next_free->prev_free == curr).
+ *    - Strict address ordering inside bins.
+ *    - Free block count and free payload byte sum across bins exactly equals
+ *      free blocks found during the physical walk.
+ * Returns 0 if all invariants hold; returns -1 and sets m_error on corruption.
+ */
+int Mem_Check(void) {
+    if (!is_initialized || arena_start == NULL || arena_size == 0) {
+        m_error = E_BAD_ARGS;
+        return -1;
+    }
+
+    if ((uintptr_t)arena_start % (uintptr_t)getpagesize() != 0) {
+        m_error = E_CORRUPT_FREESPACE;
+        return -1;
+    }
+
+    size_t max_steps = arena_size / sizeof(block_header_t) + 1;
+    size_t steps = 0;
+    block_header_t *curr = (block_header_t *)arena_start;
+    size_t total_covered_bytes = 0;
+    size_t phys_free_blocks = 0;
+    size_t phys_free_bytes = 0;
+    block_header_t *prev = NULL;
+
+    while (curr != NULL && steps++ < max_steps) {
+        /* Check pointer bounds */
+        if ((char *)curr < (char *)arena_start || (char *)curr >= (char *)arena_end) {
+            m_error = E_CORRUPT_FREESPACE;
+            return -1;
+        }
+
+        /* Check block magic tag */
+        if (curr->magic != BLOCK_MAGIC) {
+            m_error = E_CORRUPT_FREESPACE;
+            return -1;
+        }
+
+        /* Check payload alignment */
+        if (curr->size % MEM_ALIGN != 0 || curr->size < MEM_ALIGN) {
+            m_error = E_CORRUPT_FREESPACE;
+            return -1;
+        }
+
+        /* Verify physical neighbor link symmetry */
+        if (curr == (block_header_t *)arena_start) {
+            if (curr->prev_phys != NULL) {
+                m_error = E_CORRUPT_FREESPACE;
+                return -1;
+            }
+        } else {
+            if (curr->prev_phys != prev || prev->next_phys != curr) {
+                m_error = E_CORRUPT_FREESPACE;
+                return -1;
+            }
+            if ((char *)prev + sizeof(block_header_t) + prev->size != (char *)curr) {
+                m_error = E_CORRUPT_FREESPACE;
+                return -1;
+            }
+        }
+
+        /* Coalescing invariant: Two consecutive free blocks are strictly forbidden */
+        if (curr->is_free && prev != NULL && prev->is_free) {
+            m_error = E_CORRUPT_FREESPACE;
+            return -1;
+        }
+
+        /* Check payload & canary integrity for allocated blocks */
+        if (!curr->is_free) {
+            if (curr->req_size == 0 || curr->req_size + sizeof(uint64_t) > curr->size) {
+                m_error = E_PADDING_OVERWRITTEN;
+                return -1;
+            }
+
+            char *payload = (char *)curr + sizeof(block_header_t);
+            uint64_t canary_val = 0;
+            memcpy(&canary_val, payload + curr->req_size, sizeof(uint64_t));
+            if (canary_val != CANARY_MAGIC) {
+                m_error = E_PADDING_OVERWRITTEN;
+                return -1;
+            }
+
+            size_t slack_start = curr->req_size + sizeof(uint64_t);
+            for (size_t i = slack_start; i < curr->size; i++) {
+                if ((unsigned char)payload[i] != CANARY_PAD_BYTE) {
+                    m_error = E_PADDING_OVERWRITTEN;
+                    return -1;
+                }
+            }
+        } else {
+            phys_free_blocks++;
+            phys_free_bytes += curr->size;
+        }
+
+        total_covered_bytes += sizeof(block_header_t) + curr->size;
+        prev = curr;
+        curr = curr->next_phys;
+    }
+
+    if (steps >= max_steps) {
+        /* Loop in physical chain */
+        m_error = E_CORRUPT_FREESPACE;
+        return -1;
+    }
+
+    /* Entire arena must be accounted for without gaps or overflows */
+    if (total_covered_bytes != arena_size || (char *)prev + sizeof(block_header_t) + prev->size != (char *)arena_end) {
+        m_error = E_CORRUPT_FREESPACE;
+        return -1;
+    }
+
+    /* Free list & Segregated bins validation */
+    size_t bin_free_blocks = 0;
+    size_t bin_free_bytes = 0;
+
+    for (int b = 0; b < NUM_BINS; b++) {
+        block_header_t *f = free_bins[b];
+        block_header_t *prev_f = NULL;
+        size_t bin_steps = 0;
+
+        while (f != NULL && bin_steps++ < max_steps) {
+            if (f->magic != BLOCK_MAGIC || !f->is_free) {
+                m_error = E_CORRUPT_FREESPACE;
+                return -1;
+            }
+
+            if (Mem_GetBinIndex(f->size) != b) {
+                m_error = E_CORRUPT_FREESPACE;
+                return -1;
+            }
+
+            /* Doubly-linked free list symmetry */
+            if (prev_f == NULL) {
+                if (f->prev_free != NULL) {
+                    m_error = E_CORRUPT_FREESPACE;
+                    return -1;
+                }
+            } else {
+                if (f->prev_free != prev_f || prev_f->next_free != f) {
+                    m_error = E_CORRUPT_FREESPACE;
+                    return -1;
+                }
+                /* Address ordering check */
+                if (f <= prev_f) {
+                    m_error = E_CORRUPT_FREESPACE;
+                    return -1;
+                }
+            }
+
+            bin_free_blocks++;
+            bin_free_bytes += f->size;
+            prev_f = f;
+            f = f->next_free;
+        }
+
+        if (bin_steps >= max_steps) {
+            m_error = E_CORRUPT_FREESPACE;
+            return -1;
+        }
+    }
+
+    /* Bins must contain the exact same set of free blocks as the physical walk */
+    if (bin_free_blocks != phys_free_blocks || bin_free_bytes != phys_free_bytes) {
+        m_error = E_CORRUPT_FREESPACE;
+        return -1;
+    }
+
+    return 0;
+}
+
 #ifdef MEM_TESTING
 /*
  * Mem_Reset: Unmaps arena and resets allocator state.
