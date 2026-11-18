@@ -1,0 +1,49 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Chrome",
+      "request": "launch",
+      "type": "chrome",
+      "url": "http://localhost:8080",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Launch Chrome",
+      "request": "launch",
+      "type": "chrome",
+      "url": "http://localhost:8080",
+      "webRoot": "${workspaceFolder}"
+    },
+    {
+      "name": "Run Live C Allocator & Web UI (server.py)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/server.py",
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Debug Test Suite (C/C++ LLDB)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/test_suite",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build libmem.so & test_suite",
+      "stopAtEntry": false,
+      "MIMode": "lldb"
+    },
+    {
+      "name": "Debug Benchmarks (C/C++ LLDB)",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bench_compare",
+      "args": ["20000", "mixed"],
+      "cwd": "${workspaceFolder}",
+      "preLaunchTask": "Build libmem.so & test_suite",
+      "stopAtEntry": false,
+      "MIMode": "lldb"
+    }
+  ]
+}

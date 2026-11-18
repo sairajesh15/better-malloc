@@ -1,0 +1,8 @@
+{
+  "files.associations": {
+    "mem.h": "c",
+    "mem.c": "c",
+    "test_suite.c": "c"
+  },
+  "C_Cpp.default.cStandard": "c17"
+}
